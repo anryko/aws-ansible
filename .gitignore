@@ -1,0 +1,13 @@
+*.pyc
+._*
+*.retry
+*.tmp
+*.backup
+*.swp
+.env
+.env.ini
+.env.yml
+.idea
+.vscode
+.mypy_cache
+.DS_Store
