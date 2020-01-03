@@ -1,0 +1,71 @@
+#!/usr/bin/env bash
+
+set -e
+
+usage() {
+  echo "Usage: $0 1.2.3.4"
+  exit 1
+}
+
+[[ $# -eq 0 || "$1" == "-h" ]] && usage
+[[ -e .env ]] && source .env
+
+args=( "$@" )
+
+for i in ${!args[@]}; do
+  if [[ ${args[i]} = *'market='* ]]; then
+    market=$(
+      echo "${args[i]}"
+        | fmt -1
+        | grep 'market='
+        | tail -1
+        | cut -d= -f2
+    )
+    unset args[$i]
+  fi
+
+  if [[ ${args[i]} = *'env='* ]]; then
+    env=$(
+      echo "${args[i]}"
+        | fmt -1
+        | grep 'env='
+        | tail -1
+        | cut -d= -f2
+    )
+    unset args[$i]
+  fi
+
+done
+
+if [[ -n $market ]] && [[ -e .env.yml ]]; then
+  ENV_INI_VARS=$(
+    ./utilities/infra-vars get-env $market $env
+      | sed -e '/\[/d;s/#.*$//;/^$/d'
+  )
+  eval $ENV_INI_VARS
+
+elif [[ $# -eq 1 && -e .env.yml ]] || [[ $# -eq 3 && $2 == '-l' && -e .env.yml ]]; then
+  read market env <<<$(./utilities/infra-vars find-ip ${1#*@} --inline)
+  if ! [[ $market =~ [a-z]+'='[a-z]+ ]] || ! [[ $env =~ [a-z]+'='[a-z]+ ]]; then
+    echo "Provided Host dosn't belong to any ansible namanged market environment."
+    exit 1
+  fi
+
+  ENV_INI_VARS=$(
+    ./utilities/infra-vars get-env ${market#*=} ${env#*=}
+      | sed -e '/\[/d;s/#.*$//;/^$/d'
+  )
+  eval $ENV_INI_VARS
+
+  # Append ssh key to args.
+  args+=('-i' "$SSH_KEY")
+
+elif [[ -e .env ]]; then
+  source .env
+
+fi
+
+
+SSH_PROXY_CMD="ssh -i $BASTION_SSH_KEY -o StrictHostKeyChecking=no -W %h:%p -q ubuntu@$BASTION_HOST"
+
+ssh -o ProxyCommand="$SSH_PROXY_CMD" ${args[@]} -l ubuntu

@@ -1,0 +1,63 @@
+#!/usr/bin/env bash
+
+set -e
+
+usage() {
+  echo "Usage: $0 8080:1.2.3.4:80"
+  exit 1
+}
+
+[[ $# -eq 0 || "$1" == "-h" ]] && usage
+
+args=( "$@" )
+
+for i in ${!args[@]}; do
+  if [[ ${args[i]} = *'market='* ]]; then
+    market=$(
+      echo "${args[i]}"
+        | fmt -1
+        | grep 'market='
+        | tail -1
+        | cut -d= -f2
+    )
+    unset args[$i]
+  fi
+
+  if [[ ${args[i]} = *'env='* ]]; then
+    env=$(
+      echo "${args[i]}"
+        | fmt -1
+        | grep 'env='
+        | tail -1
+        | cut -d= -f2
+    )
+    unset args[$i]
+  fi
+done
+
+if [[ -n $market ]] && [[ -e .env.yml ]]; then
+  ENV_INI_VARS=$(
+    ./utilities/infra-vars get-env $market $env
+      | sed -e '/\[/d;s/#.*$//;/^$/d'
+  )
+  eval $ENV_INI_VARS
+
+elif [[ $# -eq 1 ]] && [[ -e .env.yml ]] && [[ $1 =~ ^[0-9]+:(.+):[0-9]+ ]]; then
+  read market env <<<$(./utilities/infra-vars find-ip ${BASH_REMATCH[1]} --inline)
+  if ! [[ $market =~ [a-z]+'='[a-z]+ ]] || ! [[ $env =~ [a-z]+'='[a-z]+ ]]; then
+    echo "Provided Host dosn't belong to any ansible namanged market environment."
+    exit 1
+  fi
+
+  ENV_INI_VARS=$(
+    ./utilities/infra-vars get-env ${market#*=} ${env#*=}
+      | sed -e '/\[/d;s/#.*$//;/^$/d'
+  )
+  eval $ENV_INI_VARS
+
+elif [[ -e .env ]]; then
+  source .env
+
+fi
+
+ssh -i $BASTION_SSH_KEY -o StrictHostKeyChecking=no ubuntu@$BASTION_HOST -L ${args[@]}

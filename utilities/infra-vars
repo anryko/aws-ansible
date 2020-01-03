@@ -1,0 +1,89 @@
+#!/usr/bin/env python3
+
+import sys
+import yaml
+import click
+from glob import iglob
+from socket import gethostbyname
+from ipaddress import ip_network, ip_address
+
+
+ENV_YAML_CONFIG_FILE: str = '.env.yml'
+
+
+def dict_to_env(d: dict) -> str:
+    return '\n'.join([f"{k}={v}" for k, v in d.items()])
+
+
+@click.group()
+def cli():
+    pass
+
+
+@cli.command()
+@click.argument('market')
+@click.argument('env')
+def get_env(market: str, env: str) -> None:
+    try:
+        with open(ENV_YAML_CONFIG_FILE, 'r') as f:
+            config: dict = yaml.safe_load(f)
+    except Exception as e:
+        print(e)
+        sys.exit(1)
+
+    try:
+        market_env: dict = config['markets'][market]['env']
+        env_env: dict = config['markets'][market]['environments'][env]['env']
+    except KeyError as e:
+        print(f"Malformed config file '{ENV_YAML_CONFIG_FILE}': KeyError {e}")
+        sys.exit(1)
+
+    combined_env: dict = {**market_env, **env_env}
+    print(dict_to_env(combined_env))
+
+
+@cli.command()
+@click.argument('host')
+@click.option('--inline', is_flag=True, help='Skip trailing new line on print.')
+def find_ip(host: str, inline: bool) -> None:
+    try:
+        ip = ip_address(host)
+    except Exception:
+        try:
+            ip = ip_address(gethostbyname(host))
+        except Exception:
+            print("Error resolving host.")
+            sys.exit(1)
+
+    for path in iglob('market/*/config/*/infra.yml'):
+        try:
+            with open(path, 'r') as f:
+                infra: dict = yaml.safe_load(f)
+        except Exception as e:
+            print(e)
+            sys.exit(1)
+
+        try:
+            vpc: dict = infra['infra']['vpcs'][0]
+            cidr: str = vpc['cidr']
+            market: str = vpc['market_code']
+            env: str = vpc['env']
+        except KeyError as e:
+            print(f"Malformed config file '{path}': KeyError {e}")
+            sys.exit(1)
+
+        try:
+            subnet = ip_network(cidr)
+        except Exception:
+            print(f"Invalid VPC CIDR: {cidr}")
+            sys.exit(1)
+
+        if ip in subnet:
+            print(f"market={market} env={env}", end='' if inline else '\n')
+            sys.exit(0)
+
+    sys.exit(1)
+
+
+if __name__ == '__main__':
+    cli()
