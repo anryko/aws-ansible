@@ -5,15 +5,17 @@
 # container with all the dependencies included.
 
 ANSIBLE_ROOT=$PWD
+ANSIBLE_TMP=$([[ -d "$PWD/tmp" ]] && echo "$PWD/tmp" || echo "/tmp")
 ANSIBLE_DOCKER_IMAGE=anryko/ansible:latest
 DOCKER_OPTS=${DOCKER_OPTS:-'-it --rm --cap-add SYS_PTRACE --hostname=ansible'}
 
-DOCKER_MOUNTS="-v $ANSIBLE_ROOT:/etc/ansible \
-               -v $HOME/.ssh:/root/.ssh \
-               -v $HOME/.aws:/root/.aws \
-               -v $HOME/.gnupg:/root/.gnupg \
-               -v /tmp:/tmp \
-               -v /var/run/docker.sock:/var/run/docker.sock"
+DOCKER_MOUNTS=" \
+  -v $ANSIBLE_ROOT:/etc/ansible \
+  -v $HOME/.ssh:/root/.ssh \
+  -v $HOME/.aws:/root/.aws \
+  -v $HOME/.gnupg:/root/.gnupg \
+  -v $ANSIBLE_TMP:/tmp \
+  -v /var/run/docker.sock:/var/run/docker.sock"
 
 DOCKER_ENV=${DOCKER_ENV:-}
 
