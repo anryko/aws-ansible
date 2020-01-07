@@ -1,0 +1,3 @@
+ansible_ssh_common_args: -o ProxyCommand="ssh -i {{ lookup('env', 'BASTION_SSH_KEY') }} -o StrictHostKeyChecking=no -W %h:%p -q ubuntu@{{ lookup('env', 'BASTION_HOST') }}"
+ansible_private_key_file: "{{ lookup('env', 'SSH_KEY') }}"
+ansible_user: ubuntu
