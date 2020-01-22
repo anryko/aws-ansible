@@ -36,6 +36,7 @@ RUN apt-get update && \
       apt-transport-https \
       software-properties-common \
       && \
+    ln -s /usr/local/bin/python /usr/bin/python && \
     pip install $PIP_ARGS \
       boto \
       boto3 \
