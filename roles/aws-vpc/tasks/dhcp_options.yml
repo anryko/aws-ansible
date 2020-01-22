@@ -1,0 +1,38 @@
+---
+# NOTE:
+# - dhcp_option is passed with include
+# - vpc, set_vpc_id comes from upper scope
+
+- name: "{{ dhcp_option.name }} > dhcp option"
+  block:
+  - name: "{{ dhcp_option.name }} > assert config"
+    assert:
+      that:
+      - dhcp_option.domain_name is string
+      - dhcp_option.domain_name | length > 5
+      msg: DHCP option is misconfigured.
+
+  - name: "{{ dhcp_option.name }} > create dhcp option"
+    ec2_vpc_dhcp_option:
+      region: "{{ vpc.region }}"
+      domain_name: "{{ dhcp_option.domain_name }}"
+      dns_servers: "{{ dhcp_option.dns_servers | d('AmazonProvidedDNS') }}"
+      ntp_servers: "{{ dhcp_option.ntp_servers | d(omit) }}"
+      netbios_name_servers: "{{ dhcp_option.netbios_name_servers | d(omit) }}"
+      netbios_node_type: "{{ dhcp_option.netbios_node_type | d(omit) }}"
+      delete_old: "{{ dhcp_option.delete_old | d(omit) }}"
+      inherit_existing: "{{ dhcp_option.inherit_existing | d(omit) }}"
+      tags: >
+        {{
+          dhcp_option.tags | d({})
+            | combine(vpc.tags)
+            | combine({'Name': dhcp_option.name})
+        }}
+      vpc_id: "{{
+        set_vpc_id
+        if dhcp_option.is_active is defined and dhcp_option.is_active is sameas True
+        else omit
+      }}"
+
+  tags:
+  - vpc-dhcp-options

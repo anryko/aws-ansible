@@ -1,0 +1,105 @@
+---
+- name: assert vpc config
+  assert:
+    that:
+    - vpc is mapping
+    - vpc.name is string
+    - vpc.name | length > 3
+    - vpc.region is string
+    - vpc.cidr | ipaddr
+    - vpc.tenancy is string
+    - vpc.tags is mapping
+    msg: VPC is misconfigured.
+  tags:
+  - always
+
+
+- name: "{{ vpc.name }} > create vpc"
+  ec2_vpc_net:
+    name: "{{ vpc.name }}"
+    region: "{{ vpc.region }}"
+    cidr_block: "{{ vpc.cidr }}"
+    tenancy: "{{ vpc.tenancy }}"
+    tags: "{{ vpc.tags }}"
+  register: ec2_vpc_net_output
+  tags:
+  - always
+
+- name: "{{ vpc.name }} > set vpc id"
+  set_fact:
+    set_vpc_id: "{{ ec2_vpc_net_output.vpc.id }}"  # str
+  tags:
+  - always
+
+
+- include_tasks: dhcp_options.yml
+  when: dhcp_option.name is defined
+  loop: "{{ vpc.dhcp_options | d([]) }}"
+  loop_control:
+    loop_var: dhcp_option
+  tags:
+  - vpc-dhcp-options
+
+- include_tasks: subnets.yml
+  when: subnet.name is defined
+  loop: "{{ vpc.subnets | d([]) }}"
+  loop_control:
+    loop_var: subnet
+  tags:
+  - vpc-subnets
+
+- include_tasks: internet_gateways.yml
+  when: internet_gateway.name is defined
+  loop: "{{ vpc.internet_gateways | d([]) }}"
+  loop_control:
+    loop_var: internet_gateway
+  tags:
+  - vpc-virtual-gateways
+
+- include_tasks: virtual_gateways.yml
+  when: virtual_gateway.name is defined
+  loop: "{{ vpc.virtual_gateways | d([]) }}"
+  loop_control:
+    loop_var: virtual_gateway
+  tags:
+  - vpc-virtual-gateways
+
+- include_tasks: nat_gateways.yml
+  when: nat_gateway.name is defined
+  loop: "{{ vpc.nat_gateways | d([]) }}"
+  loop_control:
+    loop_var: nat_gateway
+  tags:
+  - vpc-nat-gateways
+
+- include_tasks: vpc_peerings.yml
+  when: vpc_peering.name is defined
+  loop: "{{ vpc.vpc_peerings | d([]) }}"
+  loop_control:
+    loop_var: vpc_peering
+  tags:
+  - vpc-peerings
+
+- include_tasks: route_tables.yml
+  when: route_table.name is defined
+  loop: "{{ vpc.route_tables | d([]) }}"
+  loop_control:
+    loop_var: route_table
+  tags:
+  - vpc-route-tables
+
+- include_tasks: dns_zones.yml
+  when: dns_zone.name is defined
+  loop: "{{ vpc.dns_zones | d([]) }}"
+  loop_control:
+    loop_var: dns_zone
+  tags:
+  - vpc-dns-zones
+
+- include_tasks: ec2_keys.yml
+  when: ec2_key_name | length > 0
+  loop: "{{ vpc.ec2_keys | d([]) }}"
+  loop_control:
+    loop_var: ec2_key_name
+  tags:
+  - vpc-ec2-keys

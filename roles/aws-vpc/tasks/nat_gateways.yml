@@ -1,0 +1,35 @@
+---
+# NOTE:
+# - nat_gateway is passed with include
+# - vpc comes from upper scope
+
+- name: "{{ nat_gateway.name }} > nat gateway"
+  block:
+  - name: "{{ nat_gateway.name }} > fetch subnet facts"
+    ec2_vpc_subnet_info:
+      region: "{{ vpc.region }}"
+      filters:
+        "tag:Name": "{{ nat_gateway.subnet_name }}"
+    register: ec2_vpc_subnet_info_output
+
+  - name: "{{ nat_gateway.name }} > create nat gateway"
+    ec2_vpc_nat_gateway:
+      region: "{{ vpc.region }}"
+      subnet_id: "{{ ec2_vpc_subnet_info_output.subnets[0].id }}"
+      if_exist_do_not_create: True
+      wait: True
+    register: ec2_vpc_nat_gateway_output
+
+  - name: "{{ nat_gateway.name }} > tag nat gateway"
+    ec2_tag:
+      resource: "{{ ec2_vpc_nat_gateway_output.nat_gateway_id }}"
+      region: "{{ vpc.region }}"
+      tags: >
+        {{
+          nat_gateway.tags | d({})
+            | combine(vpc.tags)
+            | combine({'Name': nat_gateway.name})
+        }}
+
+  tags:
+  - vpc-nat-gateways

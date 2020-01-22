@@ -1,0 +1,198 @@
+---
+infra:
+  vpc:
+    name: example-dev-vpc
+    market: example
+    env: dev
+    region: us-east-2
+
+    # [10.111.112.0 < used > 10.111.116.127 < free > 10.111.119.255]
+    cidr: 10.111.112.0/21
+
+    config:
+      dummy_api_key: "{! dummy_api_key !}"
+      dns_zone: dev.example.mov.lt
+      kms_key_alias: example/dev
+      packer_iam_role: example-dev-ami-packer-rl
+      ebs_base_snapshot_name: example-dev-base-kms-encrypted-vol-snap
+      ami_base_name: example-dev-base-xenial
+      ec2_base_key: example-dev-default-key
+
+    tags:
+      Unit: ExampleDevs
+
+    dns_zones:
+    - name: example.mov.lt
+      comment: public dns zone
+      is_private: False
+    - name: dev.example.mov.lt
+      comment: private dns zone
+
+    dhcp_options:
+    - name: example-dev-vpc-dhcp-options
+      domain_name: dev.example.mov.lt ec2.internal
+      is_active: True
+
+    ec2_keys:
+    - example-dev-bastion-key
+    - example-dev-default-key
+
+    ebs_volumes:
+    - name: example-dev-base-kms-encrypted-vol
+      is_attached: False
+      encrypted: True
+      kms_key_alias: example/dev
+
+    ebs_snapshots:
+    - name: example-dev-base-kms-encrypted-vol-snap
+      source: example-dev-base-kms-encrypted-vol
+
+    ami:
+    - name: example-dev-base-xenial
+      owner_id: 099720109477
+      kms_key_alias: example/dev
+      base_name: ubuntu/images/hvm-ssd/ubuntu-bionic-18.04-amd64-server
+      ansible:
+        playbook_name: sys-base-bionic.yml
+
+    # vpc_peerings:
+    # - name: example-dev-vpc_to_some-other-vpc-name_peering
+    #   peer_vpc_name: some-other-vpc-name
+
+    internet_gateways:
+    - name: example-dev-igw
+
+    nat_gateways:
+    - name: example-dev-ngw-a
+      subnet_name: example-dev-pub-sn-a
+    - name: example-dev-ngw-b
+      subnet_name: example-dev-pub-sn-b
+    - name: example-dev-ngw-c
+      subnet_name: example-dev-pub-sn-c
+
+    route_tables:
+    - name: example-dev-pub-rt-a
+      subnet_names:
+      - example-dev-pub-sn-a
+      routes:
+      - dest: 0.0.0.0/0
+        gateway_name: example-dev-igw
+      # - dest: 10.111.80.0/22
+      #   gateway_name: example-dev-vpc_to_some-other-vpc-name_peering
+    - name: example-dev-pub-rt-b
+      subnet_names:
+      - example-dev-pub-sn-b
+      routes:
+      - dest: 0.0.0.0/0
+        gateway_name: example-dev-igw
+      # - dest: 10.111.80.0/22
+      #   gateway_name: example-dev-vpc_to_some-other-vpc-name_peering
+    - name: example-dev-pub-rt-c
+      subnet_names:
+      - example-dev-pub-sn-c
+      routes:
+      - dest: 0.0.0.0/0
+        gateway_name: example-dev-igw
+      # - dest: 10.111.80.0/22
+      #   gateway_name: example-dev-vpc_to_some-other-vpc-name_peering
+    - name: example-dev-pri-rt-a
+      subnet_names:
+      - example-dev-pri-sn-a
+      routes:
+      - dest: 0.0.0.0/0
+        gateway_name: example-dev-ngw-a
+      # - dest: 10.111.80.0/22
+      #   gateway_name: example-dev-vpc_to_some-other-vpc-name_peering
+    - name: example-dev-pri-rt-b
+      subnet_names:
+      - example-dev-pri-sn-b
+      routes:
+      - dest: 0.0.0.0/0
+        gateway_name: example-dev-ngw-b
+      # - dest: 10.111.80.0/22
+      #   gateway_name: example-dev-vpc_to_some-other-vpc-name_peering
+    - name: example-dev-pri-rt-c
+      subnet_names:
+      - example-dev-pri-sn-c
+      routes:
+      - dest: 0.0.0.0/0
+        gateway_name: example-dev-ngw-c
+      # - dest: 10.111.80.0/22
+      #   gateway_name: example-dev-vpc_to_some-other-vpc-name_peering
+
+    subnets:
+    - name: example-dev-pri-sn-a
+      cidr: 10.111.112.0/24
+      az: us-east-2a
+      tags:
+        Type: private
+    - name: example-dev-pri-sn-b
+      cidr: 10.111.113.0/24
+      az: us-east-2b
+      tags:
+        Type: private
+    - name: example-dev-pri-sn-c
+      cidr: 10.111.114.0/24
+      az: us-east-2c
+      tags:
+        Type: private
+    - name: example-dev-pub-sn-a
+      cidr: 10.111.115.0/25
+      az: us-east-2a
+      is_public: True
+      tags:
+        Type: public
+    - name: example-dev-pub-sn-b
+      cidr: 10.111.115.128/25
+      az: us-east-2b
+      is_public: True
+      tags:
+        Type: public
+    - name: example-dev-pub-sn-c
+      cidr: 10.111.116.0/25
+      az: us-east-2c
+      is_public: True
+      tags:
+        Type: public
+
+    security_groups:
+    - name: example-dev-public-accessible-sg
+      rules:
+      - proto: tcp
+        ports:
+        - 443
+        - 80
+        cidr_ip:
+        - 0.0.0.0/0
+    - name: example-dev-infra-accessible-sg
+      rules:
+      - proto: tcp
+        ports:
+        - 0-65535
+        group_name:
+        - example-dev-bastion-sg
+
+    s3:
+    - name: example-dev-tmp-s3
+      tags:
+        Service: tmp
+      iam:
+        policies:
+        - name: example-dev-tmp-s3-ro-full-pl
+          template:
+            src: s3-ro
+            vars:
+              s3_bucket_name: example-dev-tmp-s3
+        - name: example-dev-tmp-s3-rw-full-pl
+          template:
+            src: s3-rw
+            vars:
+              s3_bucket_name: example-dev-tmp-s3
+
+    iam:
+      roles:
+      - name: example-dev-ami-packer-rl
+        kms:
+        - key_alias: example/dev
+        policies:
+        - example-dev-tmp-s3-ro-full-pl

@@ -1,0 +1,160 @@
+---
+# NOTE:
+# - route_table is passed with include
+# - set_vpc_id and vpc comes from upper scope
+
+- name: "{{ route_table.name }} > route table"
+  block:
+  - name: "{{ route_table.name }} > fetch nat gateway info"
+    ec2_vpc_nat_gateway_info:
+      region: "{{ vpc.region }}"
+      filters:
+        "tag:Name": "{{ item.gateway_name }}"
+    when: >
+      item.gateway_name is defined
+      and item.dest is defined
+    loop: "{{ route_table.routes }}"
+    register: ec2_vpc_nat_gateway_info_output
+
+  - name: "{{ route_table.name }} > fetch internet gateway info"
+    ec2_vpc_igw_info:
+      region: "{{ vpc.region }}"
+      filters:
+        "tag:Name": "{{ item.gateway_name }}"
+    when: >
+      item.gateway_name is defined
+      and item.dest is defined
+    loop: "{{ route_table.routes }}"
+    register: ec2_vpc_inet_gateway_info_output
+
+  - name: "{{ route_table.name }} > fetch virtual gateway info for route propagation"
+    ec2_vpc_vgw_info:
+      region: "{{ vpc.region }}"
+      filters:
+        "tag:Name": "{{ item.gateway_name }}"
+    when: >
+      item.gateway_name is defined
+      and item.is_propagating is defined
+      and item.is_propagating is sameas True
+    loop: "{{ route_table.routes }}"
+    register: ec2_vpc_vgw_propagation_info_output
+
+  - name: "{{ route_table.name }} > fetch virtual gateway info for static routes"
+    ec2_vpc_vgw_info:
+      region: "{{ vpc.region }}"
+      filters:
+        "tag:Name": "{{ item.gateway_name }}"
+    when: >
+      item.gateway_name is defined
+      and (
+        item.is_propagating is not defined
+        or item.is_propagating is sameas False
+      )
+      and item.dest is defined
+    loop: "{{ route_table.routes }}"
+    register: ec2_vpc_vgw_dest_info_output
+
+  - name: "{{ route_table.name }} > fetch vpc peering info"
+    ec2_vpc_peering_info:
+      region: "{{ vpc.region }}"
+      filters:
+        "tag:Name": "{{ item.gateway_name }}"
+    when: item.gateway_name is defined
+    loop: "{{ route_table.routes }}"
+    register: ec2_vpc_peering_info_output
+
+  - name: "{{ route_table.name }} > set gateway facts for route table"
+    set_fact:
+      set_nat_routes: >
+        {{
+          ec2_vpc_nat_gateway_info_output
+            | json_query(
+                'results[?!skipped].{
+                  id: result[0].nat_gateway_id,
+                  dest: item.dest
+                } | [?id] | [?dest]'
+              )
+        }}
+      set_inet_routes: >
+        {{
+          ec2_vpc_inet_gateway_info_output
+            | json_query(
+                'results[?!skipped].{
+                  id: internet_gateways[0].internet_gateway_id,
+                  dest: item.dest
+                } | [?id] | [?dest]'
+              )
+        }}
+      set_vgw_propagation_ids: >
+        {{
+          ec2_vpc_vgw_propagation_info_output
+            | json_query(
+                'results[?!skipped].virtual_gateways[].vpn_gateway_id'
+              )
+        }}
+      set_vgw_routes: >
+        {{
+          ec2_vpc_vgw_dest_info_output
+            | json_query(
+                'results[?!skipped].{
+                  id: virtual_gateways[0].vpn_gateway_id,
+                  dest: item.dest
+                } | [?id] | [?dest]')
+        }}
+      set_peering_routes: >
+        {{
+          ec2_vpc_peering_info_output
+            | json_query(
+                'results[?!skipped].{
+                  id: result[0].vpc_peering_connection_id,
+                  dest: item.dest
+                } | [?id] | [?dest]'
+              )
+        }}
+      set_routes: []
+
+  - name: "{{ route_table.name }} > set routes for igw and ngw"
+    set_fact:
+      set_routes: >
+        {{
+          set_routes + [
+            {
+              'dest': item.dest,
+              'gateway_id': item.id
+            }
+          ]
+        }}
+    when: item.dest and item.id
+    loop: "{{ set_inet_routes + set_nat_routes + set_vgw_routes }}"
+
+  - name: "{{ route_table.name }} > append set_routes for vpc peering"
+    set_fact:
+      set_routes: >
+        {{
+          set_routes + [
+            {
+              'dest': item.dest,
+              'vpc_peering_connection_id': item.id
+            }
+          ]
+        }}
+    when: item.dest and item.id
+    loop: "{{ set_peering_routes }}"
+
+  - name: "{{ route_table.name }} > setup routing table"
+    ec2_vpc_route_table:
+      vpc_id: "{{ set_vpc_id }}"
+      region: "{{ vpc.region }}"
+      tags: >
+        {{
+          route_table.tags | d({})
+            | combine(vpc.tags)
+            | combine({'Name': route_table.name})
+        }}
+      subnets: "{{ route_table.subnet_names }}"
+      routes: "{{ set_routes }}"
+      propagating_vgw_ids: "{{ set_vgw_propagation_ids | d(omit) }}"
+      purge_routes: "{{ route_table.do_purge_routes | d(True) }}"
+
+  tags:
+  - vpc-route-tables

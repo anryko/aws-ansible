@@ -1,0 +1,53 @@
+---
+# NOTE:
+# - vpc_peering Dict is passed with include
+# - vpc Dict comes from upper scope
+# - set_vpc_id Str comes from upper scope
+
+- name: "{{ vpc_peering.name }} > vpc peering"
+  block:
+  - name: "{{ vpc_peering.name }} > assert config"
+    assert:
+      that:
+      - vpc_peering.peer_vpc_name is string
+      - vpc_peering.peer_vpc_name | length > 3
+      msg: VPC peering is misconfigured.
+
+  - name: "{{ vpc_peering.name }} > fetch peer vpc info"
+    ec2_vpc_net_info:
+      region: "{{ vpc.region }}"
+      filters:
+        "tag:Name": "{{ vpc_peering.peer_vpc_name }}"
+    register: ec2_peer_vpc_net_info_output
+
+  - name: "{{ vpc_peering.name }} > set peer vpc id"
+    set_fact:
+      set_peer_vpc_id: "{{ ec2_peer_vpc_net_info_output.vpcs[0].id }}"
+
+  - name: "{{ vpc_peering.name }} > create local peering"
+    ec2_vpc_peer:
+      region: "{{ vpc.region }}"
+      vpc_id: "{{ set_vpc_id }}"
+      peer_vpc_id: "{{ set_peer_vpc_id }}"
+      tags: >
+        {{
+          vpc_peering.tags | d({})
+            | combine(vpc.tags)
+            | combine({'Name': vpc_peering.name})
+        }}
+    register: ec2_vpc_peer_outout
+
+  - name: "{{ vpc_peering.name }} > accept local peering request"
+    ec2_vpc_peer:
+      region: "{{ vpc.region }}"
+      peering_id: "{{ ec2_vpc_peer_outout.peering_id }}"
+      state: accept
+      tags: >
+        {{
+          vpc_peering.tags | d({})
+            | combine(vpc.tags)
+            | combine({'Name': vpc_peering.name})
+        }}
+
+  tags:
+  - vpc-peerings

@@ -1,0 +1,19 @@
+---
+# NOTE:
+# - virtual_gateway is passed with include
+# - set_vpc_id and vpc comes from upper scope
+
+- name: "{{ virtual_gateway.name }} > create virtual gateway"
+  ec2_vpc_vgw:
+    region: "{{ vpc.region }}"
+    vpc_id: "{{ set_vpc_id }}"
+    name: "{{ virtual_gateway.name }}"
+    type: ipsec.1
+    tags: >
+      {{
+        virtual_gateway.tags | d({})
+          | combine(vpc.tags)
+          | combine({'Name': virtual_gateway.name})
+      }}
+  tags:
+  - vpc-virtual-gateways

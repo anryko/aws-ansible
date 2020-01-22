@@ -1,0 +1,23 @@
+---
+# NOTE:
+# - ec2_key_name is passed with include
+# - vpc comes from upper scope
+
+- name: "{{ ec2_key_name }} > ec2 key"
+  block:
+  - name: "{{ ec2_key_name }} > create ec2 key"
+    ec2_key:
+      state: present
+      name: "{{ ec2_key_name }}"
+      region: "{{ vpc.region }}"
+    register: ec2_key_output
+
+  - name: "{{ ec2_key_name }} > save key to ./tmp/{{ ec2_key_name }}.pem"
+    copy:
+      content: "{{ ec2_key_output.key.private_key }}"
+      dest: "../tmp/{{ ec2_key_name }}.pem"
+      mode: 0600
+    when: ec2_key_output is changed
+
+  tags:
+  - vpc-ec2-keys
