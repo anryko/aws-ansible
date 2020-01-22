@@ -1,0 +1,30 @@
+---
+# NOTE:
+# - subnet is passed with include
+# - vpc, set_vpc_id comes from upper scope
+
+- name: "{{ subnet.name }} > subnet"
+  block:
+  - name: "{{ subnet.name }} > assert config"
+    assert:
+      that:
+      - subnet.cidr | ipaddr
+      - subnet.az is string
+      msg: Subnet is misconfigured.
+
+  - name: "{{ subnet.name }} > create subnet"
+    ec2_vpc_subnet:
+      vpc_id: "{{ set_vpc_id }}"
+      region: "{{ vpc.region }}"
+      cidr: "{{ subnet.cidr }}"
+      az: "{{ subnet.az }}"
+      map_public: "{{ subnet.is_public | d(False) }}"
+      resource_tags: >
+        {{
+          subnet.tags | d({})
+            | combine(vpc.tags)
+            | combine({'Name': subnet.name})
+        }}
+
+  tags:
+  - vpc-subnets

@@ -1,0 +1,17 @@
+---
+# NOTE:
+# - internet_gateway is passed with include
+# - set_vpc_id and vpc comes from upper scope
+
+- name: "{{ internet_gateway.name }} > create internet gateway"
+  ec2_vpc_igw:
+    vpc_id: "{{ set_vpc_id }}"
+    region: "{{ vpc.region }}"
+    tags: >
+      {{
+        internet_gateway.tags | d({})
+          | combine(vpc.tags)
+          | combine({'Name': internet_gateway.name})
+      }}
+  tags:
+  - vpc-internet-gateways

@@ -1,0 +1,43 @@
+---
+# NOTE:
+# - dns_zone Dict is passed with include
+# - vpc Dict comes from upper scope
+# - set_vpc_id Str comes from upper scope
+
+- name: "{{ dns_zone.name }} > dns zone"
+  block:
+  - name: "{{ dns_zone.name }} > fetch all dns zones"
+    route53_info:
+      query: hosted_zone
+    register: route53_info_output
+
+  - name: "{{ dns_zone.name }} > check is zone exists"
+    set_fact:
+      set_is_zone_present: >
+        {{
+          dns_zone.name + '.' in (
+            route53_info_output
+            | json_query('HostedZones[*].Name')
+          )
+        }}
+
+  - name: "{{ dns_zone.name }} > create dns zones"
+    route53_zone:
+      zone: "{{ dns_zone.name }}"
+      vpc_id: "{{
+        set_vpc_id
+        if dns_zone.is_private | d(True)
+        else omit
+      }}"
+      vpc_region: "{{
+        vpc.region
+        if dns_zone.is_private | d(True)
+        else omit
+      }}"
+      comment: "{{ dns_zone.comment | default(dns_zone.name) }}"
+    when: >
+      set_is_zone_present is defined
+      and set_is_zone_present is sameas False
+
+  tags:
+  - vpc-dns-zones

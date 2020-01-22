@@ -1,0 +1,15 @@
+---
+vpc_srv: null  # Dict
+
+vpc_defaults:  # Dict
+  tenancy: default  # str
+  tags:
+    Market: "{{ vpc_srv.market }}"  # str
+    Environment: "{{ vpc_srv.env }}"  # str
+    Automated: 'true'  # str
+
+vpc: >-
+  {{
+    vpc_defaults
+      | combine(vpc_srv, recursive=True)
+  }}  # Dict

@@ -1,0 +1,68 @@
+---
+- name: check env
+  hosts: localhost
+  gather_facts: False
+  tags:
+  - always
+
+  tasks:
+  - name: assert playbook vars
+    assert:
+      that:
+      - market is defined
+      - env is defined
+      msg: >
+        You must provide -e '
+        market=[us|lt|...]
+        env=[dev|stg|prd|...]'
+
+
+- name: aws infrastructure
+  hosts: localhost
+  connection: local
+  gather_facts: False
+
+  pre_tasks:
+  - name: setup vars
+    block:
+    - name: set dynamic import paths
+      set_fact:
+        vpc_conf_path:
+          ../market/{{ market }}/config/{{ env }}/infra.yml:infra.vpc
+        vpc_scrt_path:
+          ../market/{{ market }}/secret/{{ env }}/infra.yml:infra.secrets
+
+    - name: load configs from files and template
+      set_fact:
+        vpc_conf: >
+          {{
+            lookup(
+              'tmpl_files',
+              vpc_conf_path,
+              vpc_scrt_path
+            )
+          }}  # Dict
+
+    - name: print yaml config
+      debug:
+        verbosity: 3
+        msg: "{{ (vpc_conf | to_nice_yaml).split('\n') }}"
+
+    - name: assert prepared vars
+      assert:
+        that:
+        - vpc_conf is mapping
+        - vpc_conf.market == market
+        - vpc_conf.env == env
+        - not '{?' in vpc_conf | to_json
+        - not '{!' in vpc_conf | to_json
+        msg: VPC template is misconfigured.
+
+    tags:
+    - always
+
+  roles:
+  - name: aws-vpc
+    vpc_srv: "{{ vpc_conf }}"
+    tags:
+    - vpc-infra
