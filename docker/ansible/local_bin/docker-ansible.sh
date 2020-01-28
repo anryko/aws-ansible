@@ -6,12 +6,14 @@
 
 ANSIBLE_ROOT=$PWD
 ANSIBLE_TMP=$([[ -d "$PWD/tmp" ]] && echo "$PWD/tmp" || echo "/tmp")
+ANSIBLE_SSH=$([[ -d "$PWD/.ssh" ]] && echo "$PWD/.ssh" || echo "$HOME/.ssh")
+
 ANSIBLE_DOCKER_IMAGE=anryko/ansible:latest
 DOCKER_OPTS=${DOCKER_OPTS:-'-it --rm --cap-add SYS_PTRACE --hostname=ansible'}
 
 DOCKER_MOUNTS=" \
   -v $ANSIBLE_ROOT:/etc/ansible \
-  -v $HOME/.ssh:/root/.ssh \
+  -v $ANSIBLE_SSH:/root/.ssh \
   -v $HOME/.aws:/root/.aws \
   -v $HOME/.gnupg:/root/.gnupg \
   -v $ANSIBLE_TMP:/tmp \
