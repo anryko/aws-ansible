@@ -5,7 +5,7 @@
 
 - name: "{{ nat_gateway.name }} > nat gateway"
   block:
-  - name: "{{ nat_gateway.name }} > fetch subnet facts"
+  - name: "{{ nat_gateway.name }} > fetch subnet info"
     ec2_vpc_subnet_info:
       region: "{{ vpc.region }}"
       filters:

@@ -1,27 +1,35 @@
 ---
 # NOTE:
-# - ec2_key_name is passed with include
-# - vpc comes from upper scope
+# - ec2_key Dict is passed with include
+# - vpc Dict comes from upper scope
 
-- name: "{{ ec2_key_name }} > ec2 ssh key"
+- name: "{{ ec2_key.name }} > ec2 ssh key"
   block:
-  - name: "{{ ec2_key_name }} > create ec2 ssh key"
+  - name: "{{ ec2_key.name }} > assert config"
+    assert:
+      that:
+      - ec2_key.name is string
+      - ec2_key.name | length > 0
+      msg: EC2 key is misconfigured.
+
+  - name: "{{ ec2_key.name }} > create ec2 ssh key"
     ec2_key:
       state: present
-      name: "{{ ec2_key_name }}"
+      name: "{{ ec2_key.name }}"
       region: "{{ vpc.region }}"
+      key_material: "{{ ec2_key.key_material | d(omit) }}"
     register: ec2_key_output
 
-  - name: "{{ ec2_key_name }} > create .ssh/{{ vpc.market }} directory"
+  - name: "{{ ec2_key.name }} > create .ssh/{{ vpc.market }} directory"
     file:
       path: "../.ssh/{{ vpc.market }}"
       state: directory
     when: ec2_key_output is changed
 
-  - name: "{{ ec2_key_name }} > save ./.ssh/{{ vpc.market }}/{{ ec2_key_name }}.pem"
+  - name: "{{ ec2_key.name }} > save ./.ssh/{{ vpc.market }}/{{ ec2_key.name }}.pem"
     copy:
       content: "{{ ec2_key_output.key.private_key }}"
-      dest: "../.ssh/{{ vpc.market }}/{{ ec2_key_name }}.pem"
+      dest: "../.ssh/{{ vpc.market }}/{{ ec2_key.name }}.pem"
       mode: 0600
     when: ec2_key_output is changed
 

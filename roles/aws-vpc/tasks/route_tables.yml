@@ -63,7 +63,7 @@
     loop: "{{ route_table.routes }}"
     register: ec2_vpc_peering_info_output
 
-  - name: "{{ route_table.name }} > set gateway facts for route table"
+  - name: "{{ route_table.name }} > set gateway info for route table"
     set_fact:
       set_nat_routes: >
         {{

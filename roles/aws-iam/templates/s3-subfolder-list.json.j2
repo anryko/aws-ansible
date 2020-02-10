@@ -1,0 +1,36 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": [
+        "s3:ListAllMyBuckets"
+       ],
+       "Resource": "*"
+    },
+    {
+      "Effect": "Allow",
+      "Action": [
+        "s3:GetBucketLocation",
+        "s3:ListBucketMultipartUploads"
+      ],
+      "Resource": "arn:aws:s3:::{{ tmpl.s3_bucket_name }}"
+    },
+    {
+      "Effect": "Allow",
+      "Action": [
+        "s3:ListBucket"
+      ],
+      "Resource": "arn:aws:s3:::{{ tmpl.s3_bucket_name }}",
+{% if tmpl.s3_bucket_prefix is defined and tmpl.s3_bucket_prefix.strip('/') | length > 0 %}
+      "Condition": {
+        "StringLike": {
+          "s3:prefix": "{{ tmpl.s3_bucket_prefix.strip('/') }}/*"
+        }
+      }
+{% endif %}
+    },
+{% block main_s3_iam_statements %}
+{% endblock %}
+  ]
+}

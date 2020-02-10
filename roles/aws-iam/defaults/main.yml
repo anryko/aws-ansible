@@ -1,0 +1,39 @@
+---
+aws_iam_vpc: {}
+aws_iam_srv: {}
+
+aws_iam_policies: "{{ aws_iam_srv.policies | d([]) }}"  # List[Dict]
+aws_iam_groups: "{{ aws_iam_srv.groups | d([]) }}"  # List[Dict]
+aws_iam_roles: "{{ aws_iam_srv.roles | d([]) }}"  # List[Dict]
+aws_iam_users: "{{ aws_iam_srv.users | d([]) }}"  # List[Dict]
+
+# NOTE(anryko): Policy body can be inlined in to policies[*].yaml. In that case
+# yaml will be automatically populated with "Version" field if it is not defined.
+# Alternatively, policy can be generated from template by defining
+# policies[*].template 'src' and 'vars'. Templates are located in 'templates/'
+# and are automatically appended with '.json.j2'.
+aws_iam_policy_yaml_default:
+  Version: '2012-10-17'  # str
+  Statement: []  # List[Dict]
+
+# NOTE(anryko): kms.is_allowed set to False will deny kms key access for the role.
+aws_iam_role_kms_default:
+  is_allowed: True  # bool (required)
+  region: "{{ aws_iam_vpc.region }}"  # str
+  mode: grant  # str
+  key_alias: ''  # str (required)
+  grant_types: role  # str (CSV: role,role grant,admin)
+
+aws_iam_role_default:
+  name: ''  # str
+  trust_policy: "{{ lookup('file', 'policy.json') }}"  # str
+  assume_policy_type: ''  # str (e.g elasticmapreduce)
+  kms: []  # List[Dict]
+  policies: []  # List[str]
+
+aws_iam_user_default:
+  name: ''  # str
+  state: present  # str
+  region: "{{ aws_iam_vpc.region }}"  # str
+  kms: []  # List[Dict]
+  policies: []  # List[str]

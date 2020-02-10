@@ -1,0 +1,17 @@
+{% extends "s3-subfolder-list.json.j2" %}
+
+{% block main_s3_iam_statements %}
+  {
+    "Effect": "Allow",
+    "Action": [
+      "s3:GetObject",
+      "s3:GetObjectAcl",
+      "s3:GetObjectVersion",
+      "s3:GetObjectVersionAcl",
+    ],
+    "Resource": [
+      "arn:aws:s3:::{{ tmpl.s3_bucket_name }}{% if tmpl.s3_bucket_prefix is defined %}/{{ tmpl.s3_bucket_prefix.strip('/') }}{% endif %}",
+      "arn:aws:s3:::{{ tmpl.s3_bucket_name }}{% if tmpl.s3_bucket_prefix is defined %}/{{ tmpl.s3_bucket_prefix.strip('/') }}{% endif %}/*"
+    ]
+  }
+{% endblock %}
