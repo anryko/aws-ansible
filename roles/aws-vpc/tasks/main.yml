@@ -14,7 +14,7 @@
   - always
 
 
-- name: "{{ vpc.name }} > create vpc"
+- name: "{{ vpc.name }} > manage vpc"
   ec2_vpc_net:
     name: "{{ vpc.name }}"
     region: "{{ vpc.region }}"
@@ -97,9 +97,17 @@
   - vpc-dns-zones
 
 - include_tasks: ec2_keys.yml
-  when: ec2_key_name | length > 0
+  when: ec2_key.name is defined
   loop: "{{ vpc.ec2_keys | d([]) }}"
   loop_control:
-    loop_var: ec2_key_name
+    loop_var: ec2_key
   tags:
   - vpc-ec2-keys
+
+- include_tasks: kms_keys.yml
+  when: kms_key.name is defined
+  loop: "{{ vpc.kms_keys | d([]) }}"
+  loop_control:
+    loop_var: kms_key
+  tags:
+  - vpc-kms-keys

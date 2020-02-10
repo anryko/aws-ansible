@@ -1,0 +1,84 @@
+---
+# NOTE:
+# - s3_bucket is passed with include
+# - set_s3_kms_key_alias_to_arn_map comes from upper scope (main.yml)
+
+- name: assert s3 config
+  assert:
+    that:
+    - s3_bucket is mapping
+    - s3_bucket.name is defined
+    - s3_bucket.name is string
+    - s3_bucket.name | length > 0
+    msg: S3 bucket is misconfigured.
+  tags:
+  - always
+
+
+- name: "{{ s3_bucket.name }} > set s3 bucket with defaults"
+  set_fact:
+    set_s3_bucket: >
+      {{
+        aws_s3_bucket_default | combine(s3_bucket, recursive=True)
+      }}  # Dict
+
+- name: "{{ set_s3_bucket.name }} > manage s3 bucket"
+  s3_bucket:
+    region: "{{ set_s3_bucket.region }}"
+    name: "{{ set_s3_bucket.name }}"
+    versioning: "{{ set_s3_bucket.versioning }}"
+    encryption: "{{
+      set_s3_bucket.encryption
+      if set_s3_bucket.is_encrypted is sameas True
+      else omit
+    }}"
+    encryption_key_id: "{{
+      (
+        set_s3_bucket.is_encrypted is sameas True
+        and set_s3_bucket.encryption.lower() == 'aws:kms'
+      )
+      | ternary(
+          set_s3_bucket.encryption_key
+          if set_s3_bucket.encryption_key.startswith('arn:')
+          else set_s3_kms_key_alias_to_arn_map[set_s3_bucket.encryption_key],
+          omit
+        )
+    }}"  # str
+    tags: "{{ set_s3_bucket.tags }}"
+    policy: "{{
+      aws_s3_policy_yaml_default | combine(set_s3_bucket.policy) | to_json
+      if set_s3_bucket.policy
+      else omit
+    }}"
+
+- name: "{{ set_s3_bucket.name }} > configure s3 bucket logging"
+  s3_logging:
+    region: "{{ set_s3_bucket.region }}"
+    name: "{{ set_s3_bucket.name }}"
+    target_bucket: "{{ set_s3_bucket.logging.target_bucket }}"
+    target_prefix: "{{ set_s3_bucket.logging.target_prefix }}"
+  when: >
+    set_s3_bucket.logging is defined
+    and set_s3_bucket.logging is mapping
+    and set_s3_bucket.logging.target_bucket is defined
+    and set_s3_bucket.logging.target_prefix is defined
+
+- name: "{{ set_s3_bucket.name }} > configure s3 bucket lifecycles"
+  s3_lifecycle:
+    region: "{{ set_s3_bucket.region }}"
+    name: "{{ set_s3_bucket.name }}"
+    rule_id: "{{ item.name | d(omit) }}"
+    expiration_days: "{{ item.expiration_days | d(omit) }}"
+    prefix: "{{ item.prefix | d(omit) }}"
+    status: "{{ item.status | d('enabled') }}"
+    storage_class: "{{ item.storage_class | d(omit) }}"
+    transition_days: "{{ item.transition_days | d(omit) }}"
+  when: >
+    item.expiration_days is defined
+    or item.transition_days is defined
+  loop: "{{ set_s3_bucket.lifecycles }}"
+
+
+- name: "{{ set_s3_bucket.name }} > unset local loop vars"
+  set_fact:
+    set_s3_bucket: null

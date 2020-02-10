@@ -12,13 +12,16 @@ infra:
     config:
       dummy_api_key: "{! dummy_api_key !}"
       dns_zone: dev.example.mov.lt
-      kms_key_alias: example/dev
+      kms_key_alias: example-dev-kms-key
       packer_iam_role: example-dev-ami-packer-rl
       ebs_base_snapshot_name: example-dev-base-kms-encrypted-vol-snap
       ami_base_name: example-dev-base-xenial
       ec2_base_key: example-dev-default-key
 
     tags:
+      Automated: 'true'
+      Market: example
+      Environment: dev
       Unit: ExampleDevs
 
     dns_zones:
@@ -34,14 +37,17 @@ infra:
       is_active: True
 
     ec2_keys:
-    - example-dev-bastion-key
-    - example-dev-default-key
+    - name: example-dev-bastion-key
+    - name: example-dev-default-key
+
+    kms_keys:
+    - name: example-dev-kms-key
 
     ebs_volumes:
     - name: example-dev-base-kms-encrypted-vol
       is_attached: False
       encrypted: True
-      kms_key_alias: example/dev
+      kms_key_alias: example-dev-kms-key
 
     ebs_snapshots:
     - name: example-dev-base-kms-encrypted-vol-snap
@@ -50,7 +56,7 @@ infra:
     ami:
     - name: example-dev-base-xenial
       owner_id: 099720109477
-      kms_key_alias: example/dev
+      kms_key_alias: example-dev-kms-key
       base_name: ubuntu/images/hvm-ssd/ubuntu-bionic-18.04-amd64-server
       ansible:
         playbook_name: sys-base-bionic.yml
@@ -174,6 +180,13 @@ infra:
 
     s3:
     - name: example-dev-tmp-s3
+      versioning: True
+      lifecycles:
+      - name: example-dev-tmp-s3-lifecycle
+        expiration_days: 365
+        prefix: /
+        transition_days: 30
+        storage_class: glacier
       tags:
         Service: tmp
       iam:
@@ -188,11 +201,28 @@ infra:
             src: s3-rw
             vars:
               s3_bucket_name: example-dev-tmp-s3
+    - name: example-dev-logs-aws-s3
+      encryption: AES256
+      lifecycles:
+      - name: example-dev-logs-aws-s3-lifecycle
+        expiration_days: 90
+        prefix: /
+      policy:
+        # https://docs.aws.amazon.com/elasticloadbalancing/latest/classic/enable-access-logs.html
+        Statement:
+        - Sid: logs-aws-elb-access
+          Action:
+          - s3:PutObject
+          Effect: Allow
+          Resource: arn:aws:s3:::example-dev-logs-aws-s3/*
+          Principal:
+            AWS:
+            - '033677994240'
 
     iam:
       roles:
       - name: example-dev-ami-packer-rl
         kms:
-        - key_alias: example/dev
+        - key_alias: example-dev-kms-key
         policies:
         - example-dev-tmp-s3-ro-full-pl

@@ -54,6 +54,9 @@
         - vpc_conf is mapping
         - vpc_conf.market == market
         - vpc_conf.env == env
+        - vpc_conf.region is defined
+        - vpc_conf.region is string
+        - vpc_conf.region | length > 5
         - not '{?' in vpc_conf | to_json
         - not '{!' in vpc_conf | to_json
         msg: VPC template is misconfigured.
@@ -66,3 +69,33 @@
     vpc_srv: "{{ vpc_conf }}"
     tags:
     - vpc-infra
+
+  - name: aws-s3
+    aws_s3_vpc: "{{ vpc_conf }}"
+    aws_s3_srv: "{{ vpc_conf.s3 }}"
+    when: vpc_conf.s3 is defined
+    tags:
+    - vpc-s3
+
+  - name: aws-iam
+    aws_iam_vpc: "{{ vpc_conf }}"
+    aws_iam_srv: >
+      {{
+        {
+          'policies': vpc_conf.s3 | json_query('[].iam.policies') | flatten,
+          'groups': vpc_conf.s3 | json_query('[].iam.groups') | flatten,
+          'roles': vpc_conf.s3 | json_query('[].iam.roles') | flatten,
+          'users': vpc_conf.s3 | json_query('[].iam.users')  | flatten
+        }
+      }}  # List[Dict]
+    when: vpc_conf.s3 is defined
+    tags:
+    - vpc-s3
+    - vpc-iam
+
+  - name: aws-iam
+    aws_iam_vpc: "{{ vpc_conf }}"
+    aws_iam_srv: "{{ vpc_conf.iam }}"
+    when: vpc_conf.iam is defined
+    tags:
+    - vpc-iam

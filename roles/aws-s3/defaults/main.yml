@@ -1,0 +1,31 @@
+---
+aws_s3_vpc: {}  # Dict
+aws_s3_srv: []  # List[Dict]
+
+aws_s3_policy_yaml_default:
+  Version: '2012-10-17'  # str
+  Statement: []  # List[Dict]
+
+aws_s3_bucket_default:
+  name: null  # str
+  region: "{{ aws_s3_vpc.region }}"  # str
+  versioning: False  # bool
+  is_encrypted: True  # bool
+  encryption: aws:kms  # str(None, 'AES256', 'aws:kms')
+  encryption_key: "{{
+    aws_s3_vpc.config.kms_key_alias | d(None)
+  }}"  # str
+  policy: {}  # Dict
+  lifecycles: []  # List[Dict]
+  # Example lifecycles:
+  # - name: 'move /tmp/ to glacier in 30 days'
+  #   expiration_days: 30  # int
+  #   prefix: /tmp/  # str
+  #   status: enabled  # str
+  #   storage_class: glacier  # str
+  #   transition_days: 7  # int
+  logging: {}  # Dict
+  # Example logging:
+  #   target_bucket: logs-s3-bucket
+  #   target_prefix: logs/test-bucket
+  tags: "{{ aws_s3_vpc.tags | d({}) }}" # Dict[str, str]

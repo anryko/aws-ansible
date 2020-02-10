@@ -1,0 +1,70 @@
+---
+# NOTE:
+# - iam_role is passed with include
+
+- name: assert iam role config
+  assert:
+    that:
+    - iam_role is defined
+    - iam_role is mapping
+    - iam_role.name is defined
+    - iam_role.name is string
+    - iam_role.name | length > 0
+    msg: IAM role is misconfigured.
+
+
+- name: "{{ iam_role.name }} > set role combined variable"
+  set_fact:
+    set_role: >
+      {{ aws_iam_role_default | combine(iam_role, recursive=True) }}  # Dict
+
+- name: "{{ set_role.name }} > assert role type"
+  assert:
+    that:
+    - set_role.policies | length == 0
+    msg: >-
+      IAM role name defined as ARN is assumed to belong to a foreign
+      AWS account, therefore is not managed locally and can't have
+      policies defined.
+  when: set_role.name.startswith('arn:aws:')
+
+
+- name: "{{ set_role.name }} > manage iam role"
+  iam_role:
+    state: present
+    name: "{{ set_role.name }}"
+    assume_role_policy_document: "{{
+      set_role.trust_policy
+      if (
+        set_role.assume_policy_type is not defined
+        or set_role.assume_policy_type | length == 0
+      )
+      else lookup('template', 'policy.json.j2') }}"
+    managed_policy: "{{ set_role.policies }}"
+  register: aws_iam_role_output
+  retries: 3
+  delay: 3
+  until: aws_iam_role_output is succeeded
+  when: not set_role.name.startswith('arn:aws:')
+
+- name: "{{ set_role.name }} > warning"
+  debug:
+    msg: >-
+      IAM role name defined as ARN is assumed to belong to a foreign
+      AWS account, therefore is not managed locally.
+  when: set_role.name.startswith('arn:aws:')
+
+- name: "{{ set_role.name }} > set iam role as kms target"
+  set_fact:
+    set_kms_target: "{{ set_role }}"
+
+- include_tasks: iam_kms.yml
+  loop: "{{ set_role.kms }}"
+  loop_control:
+    loop_var: iam_kms
+  tags:
+  - iam-kms
+
+- name: "{{ set_role.name }} > unset iam role as kms target"
+  set_fact:
+    set_kms_target: null
