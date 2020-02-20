@@ -1,0 +1,40 @@
+---
+- name: assert security groups config
+  assert:
+    that:
+    - aws_sg_vpc is mapping
+    - aws_sg_vpc.name is string
+    - aws_sg_vpc.name | length > 0
+    - aws_sg_vpc.region is string
+    - aws_sg_vpc.region | length > 0
+    - aws_sg_srv is sequence
+    msg: SG is misconfigured.
+  tags:
+  - always
+
+
+- name: "{{ aws_sg_vpc.name }} > fetch vpc info"
+  ec2_vpc_net_info:
+    region: "{{ aws_sg_vpc.region }}"
+    filters:
+      "tag:Name": "{{ aws_sg_vpc.name }}"
+  register: vpc_info_output
+
+
+- include_tasks: security_groups.yml
+  loop: "{{ aws_sg_srv }}"
+  loop_control:
+    loop_var: security_group
+  vars:
+    security_group_vpc_id: "{{ vpc_info_output.vpcs[0].id }}"
+    security_group_vpc_region: "{{ aws_sg_vpc.region }}"
+    async_output_results: []
+
+
+- name: sync status
+  async_status:
+    jid: "{{ item.ansible_job_id }}"
+  loop: "{{ async_output_results | d([]) }}"
+  register: async_poll_output
+  retries: 10
+  until: async_poll_output is finished

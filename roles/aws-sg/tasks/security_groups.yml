@@ -1,0 +1,68 @@
+---
+# NOTE:
+# - security_group is passed with include
+# - security_group_vpc_id comes from upper scope
+# - security_group_vpc_region comes from upper scope
+# - async_output_results comes from upper scope
+# - aws_sg_default_description comes from defaults
+
+- name: assert security group config
+  assert:
+    that:
+    - security_group is mapping
+    - security_group.name is string
+    - security_group.name | length > 0
+    - security_group_vpc_id is string
+    - security_group_vpc_id | length > 0
+    - security_group_vpc_region is string
+    - security_group_vpc_region | length > 0
+    - async_output_results is sequence
+    msg: SG is misconfigured.
+  tags:
+  - always
+
+- name: "{{ security_group.name }} > prepare rules"
+  set_fact:
+    set_sg_rules: >
+      {{
+        set_sg_rules | d([]) | union(
+          [
+            (
+              {'group_desc': aws_sg_default_description}
+              if 'group_name' in item
+              else {}
+            )
+            | combine(item)
+          ]
+        )
+      }}
+  loop: "{{ security_group.rules | d([]) }}"
+
+
+- name: "{{ security_group.name }} > manage security group"
+  ec2_group:
+    state: present
+    name: "{{ security_group.name }}"
+    description: "{{ security_group.description | d(aws_sg_default_description) }}"
+    vpc_id: "{{ security_group_vpc_id }}"
+    region: "{{ security_group_vpc_region }}"
+    rules: "{{ set_sg_rules | d([]) }}"
+    tags: >
+      {{
+        aws_sg_vpc.tags | d({})
+          | combine({'Name': security_group.name})
+          | combine(security_group.tags | d({}))
+      }}  # List[Dict]
+  async: 30
+  poll: 0
+  register: async_output
+  changed_when: False
+
+- name: "{{ security_group.name }} > append async results list"
+  set_fact:
+    async_output_results: "{{ async_output_results + [async_output] }}"
+
+
+- name: "{{ security_group.name }} > unset local loop vars"
+  set_fact:
+    set_sg_rules: []

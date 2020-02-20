@@ -17,6 +17,7 @@ DOCKER_MOUNTS=" \
   -v $HOME/.aws:/root/.aws \
   -v $HOME/.gnupg:/root/.gnupg \
   -v $ANSIBLE_TMP:/tmp \
+  -v $ANSIBLE_TMP/ansible_async:/root/.ansible_async \
   -v /var/run/docker.sock:/var/run/docker.sock"
 
 DOCKER_ENV=${DOCKER_ENV:-}
