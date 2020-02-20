@@ -1,0 +1,5 @@
+---
+aws_sg_vpc: {}  # Dict
+aws_sg_srv: []  # List[Dict]
+
+aws_sg_default_description: automated security group

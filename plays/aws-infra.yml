@@ -99,3 +99,10 @@
     when: vpc_conf.iam is defined
     tags:
     - vpc-iam
+
+  - name: aws-sg
+    aws_sg_vpc: "{{ vpc_conf }}"
+    aws_sg_srv: "{{ vpc_conf.security_groups }}"
+    when: vpc_conf.security_groups is defined
+    tags:
+    - vpc-sg

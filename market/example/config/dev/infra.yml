@@ -171,12 +171,6 @@ infra:
         cidr_ip:
         - 0.0.0.0/0
     - name: example-dev-infra-accessible-sg
-      rules:
-      - proto: tcp
-        ports:
-        - 0-65535
-        group_name:
-        - example-dev-bastion-sg
 
     s3:
     - name: example-dev-tmp-s3
