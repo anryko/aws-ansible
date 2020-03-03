@@ -46,7 +46,7 @@
     set_fact:
       set_s3_kms_key_alias_to_arn_map: >
         {{
-          set_kms_key_alias_to_arn_map | d({}) | combine(
+          set_s3_kms_key_alias_to_arn_map | d({}) | combine(
             {item.item: item['keys'][0].key_arn}
           )
         }}

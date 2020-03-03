@@ -1,0 +1,144 @@
+{
+    "Id": "AnsibleManagedKMSPolicy",
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Sid": "Enable IAM User Permissions",
+            "Effect": "Allow",
+            "Principal": {
+                "AWS": [
+                  "arn:aws:iam::{{ tmpl_kms_account_id }}:root"
+                ]
+            },
+            "Action": "kms:*",
+            "Resource": "*"
+        },
+        {
+            "Sid": "Allow access for Key Administrators",
+            "Effect": "Allow",
+            "Principal": {
+                "AWS": [
+{% for entry in tmpl_kms_admins %}
+  {%
+    if entry.arn is defined
+      and entry.arn is string
+      and entry.arn.startswith('arn:aws:iam:')
+  %}
+                  "{{ entry.arn.strip(' "') }}"{{ '' if loop.last else ',' }}
+  {%
+    elif entry.user is defined
+      and entry.user is string
+      and entry.user | length > 2
+      and not entry.user.startswith('arn:')
+  %}
+                  "{{ tmpl_kms_iam_user_prefix }}{{ entry.user.strip(' "') }}"{{ '' if loop.last else ',' }}
+  {%
+    elif entry.role is defined
+      and entry.role is string
+      and entry.role | length > 2
+      and not entry.role.startswith('arn:')
+  %}
+                  "{{ tmpl_kms_iam_role_prefix }}{{ entry.role.strip(' "') }}"{{ '' if loop.last else ',' }}
+  {% endif %}
+{% endfor %}
+                ]
+            },
+            "Action": [
+                "kms:Create*",
+                "kms:Describe*",
+                "kms:Enable*",
+                "kms:List*",
+                "kms:Put*",
+                "kms:Update*",
+                "kms:Revoke*",
+                "kms:Disable*",
+                "kms:Get*",
+                "kms:Delete*",
+                "kms:TagResource",
+                "kms:UntagResource"
+            ],
+            "Resource": "*"
+        },
+        {
+            "Sid": "Allow use of the key",
+            "Effect": "Allow",
+            "Principal": {
+                "AWS": [
+{% for entry in tmpl_kms_users %}
+  {%
+    if entry.arn is defined
+      and entry.arn is string
+      and entry.arn.startswith('arn:aws:iam:')
+  %}
+                  "{{ entry.arn.strip(' "') }}"{{ '' if loop.last else ',' }}
+  {%
+    elif entry.user is defined
+      and entry.user is string
+      and entry.user | length > 2
+      and not entry.user.startswith('arn:')
+  %}
+                  "{{ tmpl_kms_iam_user_prefix }}{{ entry.user.strip(' "') }}"{{ '' if loop.last else ',' }}
+  {%
+    elif entry.role is defined
+      and entry.role is string
+      and entry.role | length > 2
+      and not entry.role.startswith('arn:')
+  %}
+                  "{{ tmpl_kms_iam_role_prefix }}{{ entry.role.strip(' "') }}"{{ '' if loop.last else ',' }}
+  {% endif %}
+{% endfor %}
+                ]
+            },
+            "Action": [
+                "kms:Encrypt",
+                "kms:Decrypt",
+                "kms:ReEncrypt*",
+                "kms:GenerateDataKey*",
+                "kms:DescribeKey"
+            ],
+            "Resource": "*"
+        },
+        {
+            "Sid": "Allow attachment of persistent resources",
+            "Effect": "Allow",
+            "Principal": {
+                "AWS": [
+{% for entry in tmpl_kms_users %}
+  {%
+    if entry.arn is defined
+      and entry.arn is string
+      and entry.arn.startswith('arn:aws:iam:')
+  %}
+                  "{{ entry.arn.strip(' "') }}"{{ '' if loop.last else ',' }}
+  {%
+    elif entry.user is defined
+      and entry.user is string
+      and entry.user | length > 2
+      and not entry.user.startswith('arn:')
+  %}
+                  "{{ tmpl_kms_iam_user_prefix }}{{ entry.user.strip(' "') }}"{{ '' if loop.last else ',' }}
+  {%
+    elif entry.role is defined
+      and entry.role is string
+      and entry.role | length > 2
+      and not entry.role.startswith('arn:')
+  %}
+                  "{{ tmpl_kms_iam_role_prefix }}{{ entry.role.strip(' "') }}"{{ '' if loop.last else ',' }}
+  {% endif %}
+{% endfor %}
+                ]
+            },
+            "Action": [
+                "kms:CreateGrant",
+                "kms:ListGrants",
+                "kms:RevokeGrant"
+            ],
+            "Resource": "*",
+            "Condition": {
+                "Bool": {
+                    "kms:GrantIsForAWSResource": "true"
+                }
+            }
+        }
+    ]
+}

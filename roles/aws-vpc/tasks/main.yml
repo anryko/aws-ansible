@@ -103,11 +103,3 @@
     loop_var: ec2_key
   tags:
   - vpc-ec2-keys
-
-- include_tasks: kms_keys.yml
-  when: kms_key.name is defined
-  loop: "{{ vpc.kms_keys | d([]) }}"
-  loop_control:
-    loop_var: kms_key
-  tags:
-  - vpc-kms-keys

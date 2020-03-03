@@ -16,14 +16,6 @@ aws_iam_policy_yaml_default:
   Version: '2012-10-17'  # str
   Statement: []  # List[Dict]
 
-# NOTE(anryko): kms.is_allowed set to False will deny kms key access for the role.
-aws_iam_role_kms_default:
-  is_allowed: True  # bool (required)
-  region: "{{ aws_iam_vpc.region }}"  # str
-  mode: grant  # str
-  key_alias: ''  # str (required)
-  grant_types: role  # str (CSV: role,role grant,admin)
-
 aws_iam_role_default:
   name: ''  # str
   trust_policy: "{{ lookup('file', 'policy.json') }}"  # str

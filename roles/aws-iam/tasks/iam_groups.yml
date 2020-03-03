@@ -1,26 +1,29 @@
 ---
-# - iam_group is passed with include
+# - iam_group Dict is passed with include
 
 - name: assert iam group config
   assert:
     that:
-    - iam_group is defined
     - iam_group is mapping
-    - iam_group.name is defined
     - iam_group.name is string
     - iam_group.name | length > 0
     msg: IAM group is misconfigured.
-  tags:
-  - iam-group
 
 
 - name: "{{ iam_group.name }} > create iam group and associations"
   iam_group:
     state: present
     name: "{{ iam_group.name }}"
-    managed_policy: "{{ iam_group.policies | default([]) }}"  # List[str]
-    users: "{{ iam_group.users | default([]) }}"  # List[str]
+    managed_policy: "{{ iam_group.policies | d([]) }}"  # List[str]
+    users: "{{ iam_group.users | d([]) }}"  # List[str]
     purge_policy: True
     purge_users: True
-  tags:
-  - iam-group
+  async: 20
+  poll: 0
+  register: async_output
+  changed_when: False
+
+
+- name: "{{ iam_group.name }} > append async results list"
+  set_fact:
+    async_output_results: "{{ async_output_results + [async_output | d({})] }}"

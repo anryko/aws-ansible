@@ -60,7 +60,7 @@
 
 - name: "{{ security_group.name }} > append async results list"
   set_fact:
-    async_output_results: "{{ async_output_results + [async_output] }}"
+    async_output_results: "{{ async_output_results + [async_output | d({})] }}"
 
 
 - name: "{{ security_group.name }} > unset local loop vars"

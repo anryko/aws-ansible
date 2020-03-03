@@ -100,6 +100,13 @@
     tags:
     - vpc-iam
 
+  - name: aws-kms
+    aws_kms_vpc: "{{ vpc_conf }}"
+    aws_kms_srv: "{{ vpc_conf.kms }}"
+    when: vpc_conf.kms is defined
+    tags:
+    - vpc-kms
+
   - name: aws-sg
     aws_sg_vpc: "{{ vpc_conf }}"
     aws_sg_srv: "{{ vpc_conf.security_groups }}"

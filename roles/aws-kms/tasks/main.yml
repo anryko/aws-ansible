@@ -1,0 +1,70 @@
+---
+- name: assert kms config
+  assert:
+    that:
+    - aws_kms_vpc is mapping
+    - aws_kms_vpc.region is string
+    - aws_kms_vpc.region | length > 0
+    - aws_kms_srv is sequence
+    - aws_kms_srv | length > 0
+    - aws_kms_srv[0] is mapping
+    msg: KMS is misconfigured.
+
+
+- name: manage kms keys
+  block:
+  - name: setup async queue
+    set_fact:
+      async_output_results: []
+
+  - include_tasks: kms_keys.yml
+    loop: "{{ aws_kms_srv }}"  # List[Dict]
+    loop_control:
+      loop_var: kms_key
+
+  - name: sync status
+    async_status:
+      jid: "{{ item.ansible_job_id }}"
+    when: item.ansible_job_id is defined
+    loop: "{{ async_output_results | d([]) }}"
+    register: async_poll_output
+    retries: 10
+    delay: 2
+    until: async_poll_output is finished
+
+  rescue:
+  - name: print warning
+    debug:
+      msg: >-
+        Trying to rerun failed kms key automation as sometimes it fails
+        when run immediately after iam ansible role and iam users and roles
+        present in kms key policy are not yet ready on aws side to be
+        added to kms key policy.
+
+  - name: pause allowing iam changes to sink in
+    pause:
+      seconds: 10
+
+  - name: setup async queue
+    set_fact:
+      async_output_results: []
+
+  - include_tasks: kms_keys.yml
+    loop: "{{ aws_kms_srv }}"  # List[Dict]
+    loop_control:
+      loop_var: kms_key
+
+  - name: sync status
+    async_status:
+      jid: "{{ item.ansible_job_id }}"
+    when: item.ansible_job_id is defined
+    loop: "{{ async_output_results | d([]) }}"
+    register: async_poll_output
+    retries: 10
+    delay: 2
+    until: async_poll_output is finished
+
+  always:
+  - name: clear async queue
+    set_fact:
+      async_output_results: []

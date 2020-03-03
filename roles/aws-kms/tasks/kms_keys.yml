@@ -1,0 +1,102 @@
+# NOTE:
+# - kms_key Dict is passed with include
+# - async_output_results List comes from upper scope
+# - aws_kms_iam_user_prefix str comes from defaults
+# - aws_kms_iam_role_prefix str comes from defaults
+# - aws_kms_account_id str comes from defaults
+# - aws_kms_default Dict comes from defaults
+
+
+- name: assert kms config
+  assert:
+    that:
+    - kms_key is mapping
+    - kms_key.name is string
+    - kms_key.name | length > 0
+    msg: KMS is misconfigured.
+
+
+- name: "{{ kms_key.name }} > set defaults"
+  set_fact:
+    set_kms_key: "{{
+      aws_kms_default
+        | combine({'tags': {'Name': kms_key.name}}, recursive=True)
+        | combine(kms_key, recursive=True)
+    }}"  # Dict
+
+- name: "{{ set_kms_key.name }} > render kms key policy from template"
+  set_fact:
+    set_kms_key_policy: "{{
+      lookup(
+        'template',
+        'policy.json.j2',
+        template_vars=dict(
+          tmpl_kms_account_id=aws_kms_account_id,
+          tmpl_kms_admins=set_kms_key.permissions.admins,
+          tmpl_kms_users=set_kms_key.permissions.users,
+          tmpl_kms_iam_user_prefix=aws_kms_iam_user_prefix,
+          tmpl_kms_iam_role_prefix=aws_kms_iam_role_prefix
+        )
+      )
+    }}" # Dict
+
+- name: "{{ set_kms_key.name }} > print kms policy yaml"
+  debug:
+    var: set_kms_key_policy
+    verbosity: 2
+
+- name: "{{ set_kms_key.name }} > print kms policy json"
+  debug:
+    msg: "{{ set_kms_key_policy | to_json }}"
+    verbosity: 3
+
+
+- name: "{{ set_kms_key.name }} > assert kms policy"
+  assert:
+    that:
+      - set_kms_key_policy.Statement is sequence
+      - set_kms_key_policy.Statement | length == 4
+      - set_kms_key_policy.Statement[0] is mapping
+      - set_kms_key_policy.Statement[0].Principal is mapping
+      - set_kms_key_policy.Statement[0].Principal.AWS is sequence
+      - set_kms_key_policy.Statement[0].Principal.AWS | length == 1
+      - set_kms_key_policy.Statement[0].Principal.AWS[0] == "arn:aws:iam::{{ aws_kms_account_id }}:root"
+      - set_kms_key_policy.Statement[1] is mapping
+      - set_kms_key_policy.Statement[1].Principal is mapping
+      - set_kms_key_policy.Statement[1].Principal.AWS is sequence
+      - set_kms_key_policy.Statement[1].Principal.AWS | length == set_kms_key.permissions.admins | length
+      - set_kms_key_policy.Statement[2] is mapping
+      - set_kms_key_policy.Statement[2].Principal is mapping
+      - set_kms_key_policy.Statement[2].Principal.AWS is sequence
+      - set_kms_key_policy.Statement[2].Principal.AWS | length == set_kms_key.permissions.users | length
+      - set_kms_key_policy.Statement[3] is mapping
+      - set_kms_key_policy.Statement[3].Principal is mapping
+      - set_kms_key_policy.Statement[3].Principal.AWS is sequence
+      - set_kms_key_policy.Statement[3].Principal.AWS | length == set_kms_key.permissions.users | length
+    msg: Unexpected templating of KMS key policy.
+
+
+- name: "{{ set_kms_key.name }} > manage kms key"
+  aws_kms:
+    state: present
+    region: "{{ set_kms_key.region }}"
+    alias: "{{ set_kms_key.name }}"
+    description: "{{ set_kms_key.description }}"
+    tags: "{{ set_kms_key.tags }}"
+    purge_tags: "{{ set_kms_key.purge_tags }}"
+    policy: "{{ set_kms_key_policy | to_json }}"
+  async: 20
+  poll: 0
+  register: async_output
+  changed_when: False
+
+
+- name: "{{ set_kms_key.name }} > append async results list"
+  set_fact:
+    async_output_results: "{{ async_output_results + [async_output | d({})] }}"
+
+
+- name: "{{ set_kms_key.name }} > reset loop vars"
+  set_fact:
+    set_kms_key: null
+    set_kms_key_policy: null

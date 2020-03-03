@@ -4,9 +4,7 @@
 - name: assert iam user config
   assert:
     that:
-    - iam_user is defined
     - iam_user is mapping
-    - iam_user.name is defined
     - iam_user.name is string
     - iam_user.name | length > 0
     msg: IAM user is misconfigured.
@@ -14,61 +12,32 @@
 
 - name: "{{ iam_user.name }} > set user defaults"
   set_fact:
-    set_user: >
-      {{ aws_iam_user_default | combine(iam_user, recursive=True) }}  # Dict
+    set_user: "{{
+      aws_iam_user_default | combine(iam_user, recursive=True)
+    }}"  # Dict
 
 
-- name: "{{ set_user.name }} > manage local iam user"
-  block:
-  - name: "{{ set_user.name }} > manage iam user"
-    iam_user:
-      state: "{{ set_user.state }}"
-      region: "{{ set_user.region }}"
-      name: "{{ set_user.name }}"
-      managed_policy: "{{ set_user.policies }}"
-    register: aws_iam_user_output
-    retries: 3
-    delay: 3
-    until: aws_iam_user_output is succeeded
-
-  # NOTE(anryko): Overwrite user name with its ARN.
-  - name: "{{ set_user.name }} > set iam user as kms target"
-    set_fact:
-      set_kms_target: >
-        {{
-          set_user | combine(
-            {'name': aws_iam_user_output.iam_user.user.arn}
-          )
-        }}  # Dict
-
+- name: "{{ set_user.name }} > manage iam user"
+  iam_user:
+    state: "{{ set_user.state }}"
+    region: "{{ set_user.region }}"
+    name: "{{ set_user.name }}"
+    managed_policy: "{{ set_user.policies }}"
+  async: 20
+  poll: 0
+  register: async_output
+  changed_when: False
   when: not set_user.name.startswith('arn:aws:')
 
 
-- name: "{{ set_user.name }} > manage foreign iam user"
-  block:
-  - name: "{{ set_user.name }} > warning"
-    debug:
-      msg: >-
-        IAM user name defined as ARN is assumed to belong to a foreign
-        AWS account, therefore is not managed locally.
-
-  - name: "{{ set_user.name }} > set iam user as kms target"
-    set_fact:
-      set_kms_target: "{{ set_user }}"
-
+- name: "{{ set_user.name }} > warning"
+  debug:
+    msg: >-
+      IAM user name defined as ARN is assumed to belong to a foreign
+      AWS account, therefore is not managed locally.
   when: set_user.name.startswith('arn:aws:')
 
 
-# NOTE(anryko): This works for users because of the "feature" of
-# aws_kms module when it doesn't verify 'role_arn' option and
-# therefore accepts user arn as a valid target.
-- include_tasks: iam_kms.yml
-  loop: "{{ set_user.kms }}"
-  loop_control:
-    loop_var: iam_kms
-  tags:
-  - iam-kms
-
-- name: "{{ set_user.name }} > unset iam user as kms target"
+- name: "{{ set_user.name }} > append async results list"
   set_fact:
-    set_kms_target: null
+    async_output_results: "{{ async_output_results + [async_output | d({})] }}"

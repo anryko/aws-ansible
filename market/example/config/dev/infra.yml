@@ -40,8 +40,18 @@ infra:
     - name: example-dev-bastion-key
     - name: example-dev-default-key
 
-    kms_keys:
+    kms:
     - name: example-dev-kms-key
+      tags:
+        Test: test
+      permissions:
+        admins:
+        - user: andrej.svenke
+        users:
+        - user: andrej.svenke
+        - role: example-dev-ami-packer-rl
+        - user: example-dev-test1-usr
+        # - arn: arn:aws:iam::111111111111:role/example-dev-jenkins-slave1-rl
 
     ebs_volumes:
     - name: example-dev-base-kms-encrypted-vol
@@ -214,9 +224,24 @@ infra:
             - '033677994240'
 
     iam:
+      users:
+      - name: example-dev-test1-usr
+        policies:
+        - example-dev-tmp-s3-ro-test-raw-pl
+      groups:
+      - name: example-dev-test1-grp
+        policies:
+        - example-dev-tmp-s3-rw-full-pl
+        users:
+        - example-dev-test1-usr
+      policies:
+      - name: example-dev-tmp-s3-ro-test-raw-pl
+        template:
+          src: s3-ro
+          vars:
+            s3_bucket_name: example-dev-tmp-s3
+            s3_bucket_prefix: test/raw
       roles:
       - name: example-dev-ami-packer-rl
-        kms:
-        - key_alias: example-dev-kms-key
         policies:
         - example-dev-tmp-s3-ro-full-pl

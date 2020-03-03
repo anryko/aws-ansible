@@ -1,0 +1,19 @@
+---
+aws_kms_vpc: {}  # Dict
+aws_kms_srv: []  # List[Dict]
+
+aws_kms_account_id: "{{ hostvars[hostvars | list | first].get('ec2_account_id') }}"
+
+aws_kms_iam_arn: "arn:aws:iam::{{ aws_kms_account_id }}"
+aws_kms_iam_user_prefix: "{{ aws_kms_iam_arn }}:user/"
+aws_kms_iam_role_prefix: "{{ aws_kms_iam_arn }}:role/"
+
+aws_kms_default:
+  name: ''
+  description: 'automated kms key'
+  region: "{{ aws_kms_vpc.region | d(null) }}"
+  tags: "{{ aws_kms_vpc.tags | d({}) }}"
+  purge_tags: True
+  permissions:
+    admins: []
+    users: []

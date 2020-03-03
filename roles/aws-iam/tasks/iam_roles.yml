@@ -1,13 +1,11 @@
 ---
 # NOTE:
-# - iam_role is passed with include
+# - iam_role Dict is passed with include
 
 - name: assert iam role config
   assert:
     that:
-    - iam_role is defined
     - iam_role is mapping
-    - iam_role.name is defined
     - iam_role.name is string
     - iam_role.name | length > 0
     msg: IAM role is misconfigured.
@@ -15,8 +13,10 @@
 
 - name: "{{ iam_role.name }} > set role combined variable"
   set_fact:
-    set_role: >
-      {{ aws_iam_role_default | combine(iam_role, recursive=True) }}  # Dict
+    set_role: "{{
+      aws_iam_role_default | combine(iam_role, recursive=True)
+    }}"  # Dict
+
 
 - name: "{{ set_role.name }} > assert role type"
   assert:
@@ -39,13 +39,15 @@
         set_role.assume_policy_type is not defined
         or set_role.assume_policy_type | length == 0
       )
-      else lookup('template', 'policy.json.j2') }}"
+      else lookup('template', 'policy.json.j2')
+    }}"
     managed_policy: "{{ set_role.policies }}"
-  register: aws_iam_role_output
-  retries: 3
-  delay: 3
-  until: aws_iam_role_output is succeeded
+  async: 20
+  poll: 0
+  register: async_output
+  changed_when: False
   when: not set_role.name.startswith('arn:aws:')
+
 
 - name: "{{ set_role.name }} > warning"
   debug:
@@ -54,17 +56,7 @@
       AWS account, therefore is not managed locally.
   when: set_role.name.startswith('arn:aws:')
 
-- name: "{{ set_role.name }} > set iam role as kms target"
-  set_fact:
-    set_kms_target: "{{ set_role }}"
 
-- include_tasks: iam_kms.yml
-  loop: "{{ set_role.kms }}"
-  loop_control:
-    loop_var: iam_kms
-  tags:
-  - iam-kms
-
-- name: "{{ set_role.name }} > unset iam role as kms target"
+- name: "{{ set_role.name }} > append async results list"
   set_fact:
-    set_kms_target: null
+    async_output_results: "{{ async_output_results + [async_output | d({})] }}"
