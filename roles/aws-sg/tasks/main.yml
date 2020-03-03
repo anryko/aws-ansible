@@ -21,20 +21,31 @@
   register: vpc_info_output
 
 
-- include_tasks: security_groups.yml
-  loop: "{{ aws_sg_srv }}"
-  loop_control:
-    loop_var: security_group
-  vars:
-    security_group_vpc_id: "{{ vpc_info_output.vpcs[0].id }}"
-    security_group_vpc_region: "{{ aws_sg_vpc.region }}"
-    async_output_results: []
+- name: manage security groups
+  block:
+  - name: setup async queue
+    set_fact:
+      async_output_results: []
 
+  - include_tasks: security_groups.yml
+    loop: "{{ aws_sg_srv }}"
+    loop_control:
+      loop_var: security_group
+    vars:
+      security_group_vpc_id: "{{ vpc_info_output.vpcs[0].id }}"
+      security_group_vpc_region: "{{ aws_sg_vpc.region }}"
 
-- name: sync status
-  async_status:
-    jid: "{{ item.ansible_job_id }}"
-  loop: "{{ async_output_results | d([]) }}"
-  register: async_poll_output
-  retries: 10
-  until: async_poll_output is finished
+  - name: sync status
+    async_status:
+      jid: "{{ item.ansible_job_id }}"
+    when: item.ansible_job_id is defined
+    loop: "{{ async_output_results | d([]) }}"
+    register: async_poll_output
+    retries: 10
+    delay: 2
+    until: async_poll_output is finished
+
+  always:
+  - name: clear async queue
+    set_fact:
+      async_output_results: []

@@ -1,0 +1,61 @@
+---
+# NOTE:
+# - iam_policy Dict is passed with include
+# - set_account_id str comes from upper scope
+# - aws_iam_region str comes from upper scope
+
+- name: assert iam policy config
+  assert:
+    that:
+    - iam_policy is mapping
+    - iam_policy.name is string
+    - iam_policy.name | length > 0
+    msg: IAM policy is misconfigured.
+
+
+- name: "{{ iam_policy.name }} > create iam policy from yaml"
+  iam_managed_policy:
+    state: present
+    policy_name: "{{ iam_policy.name }}"
+    policy_description: "{{ iam_policy.description | d('automated policy') }}"
+    only_version: True
+    policy: >-
+      {{
+        aws_iam_policy_yaml_default
+          | combine(iam_policy.yaml)
+          | to_json
+      }}  # str
+  async: 20
+  poll: 0
+  register: async_output
+  changed_when: False
+  when: iam_policy.yaml is defined
+
+- name: "{{ iam_policy.name }} > create iam policy from template"
+  iam_managed_policy:
+    state: present
+    policy_name: "{{ iam_policy.name }}"
+    policy_description: "{{ iam_policy.description | d('automated policy') }}"
+    only_version: True
+    policy: >-
+      {{
+        lookup(
+          'template',
+          iam_policy.template.src + '.json.j2',
+          template_vars=dict(
+            tmpl=iam_policy.template.vars,
+            tmpl_account_id=set_account_id,
+            tmpl_region=aws_iam_region
+          )
+        )
+      }}  # str
+  async: 20
+  poll: 0
+  register: async_output
+  changed_when: False
+  when: iam_policy.template is defined
+
+
+- name: "{{ iam_policy.name }} > append async results list"
+  set_fact:
+    async_output_results: "{{ async_output_results + [async_output | d({})] }}"

@@ -1,123 +1,127 @@
 ---
-- name: assert iam config
-  assert:
-    that:
-    - aws_iam_vpc is mapping
-    - aws_iam_vpc.region is string
-    - aws_iam_vpc.region | length > 5
-    - aws_iam_srv is mapping
-    msg: IAM is misconfigured.
-  tags:
-  - always
+- name: fetch aws caller info
+  aws_caller_info:
+  register: aws_caller_info_outout
 
+- name: set aws account id
+  set_fact:
+    set_account_id: "{{ aws_caller_info_outout.account }}"
 
-- name: create iam managed policies from yaml
-  iam_managed_policy:
-    state: present
-    policy_name: "{{ item.name }}"
-    policy_description: "{{ item.description | d('automated policy') }}"
-    policy: >-
-      {{
-        aws_iam_policy_yaml_default
-          | combine(item.yaml)
-          | to_json
-      }}  # str
-    only_version: True
-  when: item.yaml is defined
-  loop: "{{ aws_iam_policies }}"
-
-- name: create iam managed policies from template
-  iam_managed_policy:
-    state: present
-    policy_name: "{{ item.name }}"
-    policy_description: "{{ item.description | d('automated policy') }}"
-    policy: >-
-      {{
-        lookup(
-          'template',
-          item.template.src + '.json.j2',
-          template_vars=dict(tmpl=item.template.vars)
-        )
-      }}  # str
-    only_version: True
-  when: item.template is defined
-  loop: "{{ aws_iam_policies }}"
-
-
-- name: resolve and cache kms key to id map
+- name: manage iam policies
   block:
-  - name: discover kms key arns from aliases
-    aws_kms_info:
-      region: "{{ aws_iam_vpc.region }}"
-      filters:
-        alias: "{{ item }}"
-    when: not item.startswith('arn:')
-    loop: >
-      {{
-        aws_iam_users
-          | union(aws_iam_roles)
-          | json_query('[].kms[].key_alias')
-          | unique
-      }}
-    register: aws_kms_info_output
-
-  - name: assert discovered key arns
-    assert:
-      that:
-      - item is mapping
-      - item['keys'] is sequence
-      - item['keys'] | length == 1
-      - item['keys'][0] is mapping
-      - item['keys'][0].key_arn is defined
-      - item['keys'][0].key_arn is string
-      - item['keys'][0].key_arn.startswith('arn:aws:kms:' + aws_iam_vpc.region)
-      msg: "KMS key '{{ item.item | d('null') }}' is misconfigured."
-    loop: "{{ aws_kms_info_output.results }}"
-
-  - name: set kms key alias to arn map
+  - name: setup async queue
     set_fact:
-      set_kms_key_alias_to_arn_map: >
-        {{
-          set_kms_key_alias_to_arn_map | d({})
-            | combine(
-                {item.item: item['keys'][0].key_arn}
-              )
-        }}
-    when: item.item not in (set_kms_key_alias_to_arn_map | d({}))
-    loop: "{{ aws_kms_info_output.results }}"
+      async_output_results: []
 
-  when: >
-    (
-      aws_iam_users is sequence
-      and aws_iam_users | length > 0
-    ) or (
-      aws_iam_roles is sequence
-      and aws_iam_roles | length > 0
-    )
+  - include_tasks: iam_policies.yml
+    loop: "{{ aws_iam_policies }}"
+    loop_control:
+      loop_var: iam_policy
+
+  - name: sync status
+    async_status:
+      jid: "{{ item.ansible_job_id }}"
+    when: item.ansible_job_id is defined
+    loop: "{{ async_output_results | d([]) }}"
+    register: async_poll_output
+    retries: 10
+    delay: 2
+    until: async_poll_output is finished
+
+  always:
+  - name: clear async queue
+    set_fact:
+      async_output_results: []
+
+  tags:
+  - iam-policy
+
+
+- name: manage iam users
+  block:
+  - name: setup async queue
+    set_fact:
+      async_output_results: []
+
+  - include_tasks: iam_users.yml
+    loop: "{{ aws_iam_users }}"
+    loop_control:
+      loop_var: iam_user
+
+  - name: sync status
+    async_status:
+      jid: "{{ item.ansible_job_id }}"
+    when: item.ansible_job_id is defined
+    loop: "{{ async_output_results | d([]) }}"
+    register: async_poll_output
+    retries: 10
+    delay: 2
+    until: async_poll_output is finished
+
+  always:
+  - name: clear async queue
+    set_fact:
+      async_output_results: []
+
   tags:
   - iam-user
-  - iam-role
-  - iam-role-kms
 
 
-- include_tasks: iam_users.yml
-  loop: "{{ aws_iam_users }}"
-  loop_control:
-    loop_var: iam_user
-  tags:
-  - iam-user
+- name: manage iam groups
+  block:
+  - name: setup async queue
+    set_fact:
+      async_output_results: []
 
-- include_tasks: iam_groups.yml
-  loop: "{{ aws_iam_groups }}"
-  loop_control:
-    loop_var: iam_group
+  - include_tasks: iam_groups.yml
+    loop: "{{ aws_iam_groups }}"
+    loop_control:
+      loop_var: iam_group
+
+  - name: sync status
+    async_status:
+      jid: "{{ item.ansible_job_id }}"
+    when: item.ansible_job_id is defined
+    loop: "{{ async_output_results | d([]) }}"
+    register: async_poll_output
+    retries: 10
+    delay: 2
+    until: async_poll_output is finished
+
+  always:
+  - name: clear async queue
+    set_fact:
+      async_output_results: []
+
   tags:
   - iam-group
 
-- include_tasks: iam_roles.yml
-  loop: "{{ aws_iam_roles }}"
-  loop_control:
-    loop_var: iam_role
+
+- name: manage iam roles
+  block:
+  - name: setup async queue
+    set_fact:
+      async_output_results: []
+
+  - include_tasks: iam_roles.yml
+    loop: "{{ aws_iam_roles }}"
+    loop_control:
+      loop_var: iam_role
+
+  - name: sync status
+    async_status:
+      jid: "{{ item.ansible_job_id }}"
+    when: item.ansible_job_id is defined
+    loop: "{{ async_output_results | d([]) }}"
+    register: async_poll_output
+    retries: 10
+    delay: 2
+    until: async_poll_output is finished
+
+  always:
+  - name: clear async queue
+    set_fact:
+      async_output_results: []
+
   tags:
   - iam-role
-  - iam-role-kms
