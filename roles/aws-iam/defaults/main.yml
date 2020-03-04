@@ -1,11 +1,12 @@
 ---
-aws_iam_vpc: {}
-aws_iam_srv: {}
+aws_iam_vpc: {}  # Dict[str, Any]
+aws_iam_srv: {}  # Dict[str, Any]
 
 aws_iam_policies: "{{ aws_iam_srv.policies | d([]) }}"  # List[Dict]
 aws_iam_groups: "{{ aws_iam_srv.groups | d([]) }}"  # List[Dict]
 aws_iam_roles: "{{ aws_iam_srv.roles | d([]) }}"  # List[Dict]
 aws_iam_users: "{{ aws_iam_srv.users | d([]) }}"  # List[Dict]
+aws_iam_region: "{{ aws_iam_vpc.region | d('') }}"  # str
 
 # NOTE(anryko): Policy body can be inlined in to policies[*].yaml. In that case
 # yaml will be automatically populated with "Version" field if it is not defined.
@@ -20,12 +21,10 @@ aws_iam_role_default:
   name: ''  # str
   trust_policy: "{{ lookup('file', 'policy.json') }}"  # str
   assume_policy_type: ''  # str (e.g elasticmapreduce)
-  kms: []  # List[Dict]
   policies: []  # List[str]
 
 aws_iam_user_default:
   name: ''  # str
   state: present  # str
-  region: "{{ aws_iam_vpc.region }}"  # str
-  kms: []  # List[Dict]
+  region: "{{ aws_iam_region }}"  # str
   policies: []  # List[str]

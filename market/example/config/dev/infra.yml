@@ -229,9 +229,9 @@ infra:
         policies:
         - example-dev-tmp-s3-ro-test-raw-pl
       groups:
-      - name: example-dev-test1-grp
+      - name: example-dev-dynamodb-grp
         policies:
-        - example-dev-tmp-s3-rw-full-pl
+        - example-dev-tmp-dynamodb-rw-pl
         users:
         - example-dev-test1-usr
       policies:
@@ -241,6 +241,12 @@ infra:
           vars:
             s3_bucket_name: example-dev-tmp-s3
             s3_bucket_prefix: test/raw
+      - name: example-dev-tmp-dynamodb-rw-pl
+        template:
+          src: dynamodb-rw
+          vars:
+            dynamodb_tables:
+            - example-dev-tmp
       roles:
       - name: example-dev-ami-packer-rl
         policies:
