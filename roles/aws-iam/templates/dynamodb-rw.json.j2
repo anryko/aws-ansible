@@ -1,0 +1,24 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": [
+        "dynamodb:BatchGetItem",
+        "dynamodb:GetItem",
+        "dynamodb:GetRecords",
+        "dynamodb:Query",
+        "dynamodb:Scan",
+        "dynamodb:BatchWriteItem",
+        "dynamodb:PutItem",
+        "dynamodb:UpdateItem"
+      ],
+      "Resource": [
+{% for name in tmpl.dynamodb_tables %}
+        "arn:aws:dynamodb:{{ tmpl.region | d(tmpl_region) }}:{{ tmpl.account_id | d(tmpl_account_id) }}:table/{{ name }}"
+        {%- if not loop.last %},{% else %}{% endif -%}
+{% endfor %}
+      ]
+    }
+  ]
+}

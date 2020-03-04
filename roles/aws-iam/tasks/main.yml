@@ -1,4 +1,12 @@
 ---
+- name: assert iam config
+  assert:
+    that:
+    - aws_iam_region is string
+    - aws_iam_region | length > 0
+    msg: IAM is misconfigured.
+
+
 - name: fetch aws caller info
   aws_caller_info:
   register: aws_caller_info_outout
