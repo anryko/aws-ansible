@@ -1,5 +1,8 @@
 # aws-ansible <!-- omit in toc -->
 
+An attempt to tie ansible aws modules together in to a concise framework.
+Manage VPCs and EC2s, provision IAM access, create encrypted S3 buckets, lambdas, etc.
+
 ## Table of Contents <!-- omit in toc -->
 
 - [Hacking](#hacking)

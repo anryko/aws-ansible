@@ -85,9 +85,9 @@
           'policies': vpc_conf.s3 | json_query('[].iam.policies') | flatten,
           'groups': vpc_conf.s3 | json_query('[].iam.groups') | flatten,
           'roles': vpc_conf.s3 | json_query('[].iam.roles') | flatten,
-          'users': vpc_conf.s3 | json_query('[].iam.users')  | flatten
+          'users': vpc_conf.s3 | json_query('[].iam.users') | flatten
         }
-      }}  # List[Dict]
+      }}  # Dict[str, List]
     when: vpc_conf.s3 is defined
     tags:
     - vpc-s3
