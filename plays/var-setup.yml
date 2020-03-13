@@ -1,0 +1,115 @@
+---
+- name: assert target vars
+  assert:
+    that:
+    - target is mapping
+    - target.market is string
+    - target.market | length > 0
+    - target.env is string
+    - target.env | length > 0
+    - target.service is string
+    - target.service | length > 0
+    - target.group is string
+    - target.group | length > 0
+    msg: Target is misconfigured.
+
+- name: set dynamic import paths
+  set_fact:
+    vpc_conf_path: "../market/{{ target.market }}/config/{{
+                    target.vpc_env | d(target.env) }}/infra.yml:infra.vpc"
+    vpc_scrt_path: "../market/{{ target.market }}/secret/{{
+                    target.env }}/infra.yml:infra.secrets"
+    service_conf_path: "../market/{{ target.market }}/config/{{
+                      target.env }}/{{ target.service }}.yml:{{
+                      target.service }}.{{ target.group }}"
+    service_scrt_path: "../market/{{ target.market }}/secret/{{
+                      target.env }}/{{ target.service }}.yml:{{
+                      target.service }}.{{ target.group }}.secrets"
+
+
+- name: load configs from files and template
+  set_fact:
+    vpc_conf: >
+      {{
+        lookup(
+          'tmpl_files',
+          vpc_conf_path,
+          vpc_scrt_path
+        )
+      }}  # Dict
+    service_conf: >
+      {{
+        lookup(
+          'tmpl_files',
+          service_conf_path,
+          service_scrt_path,
+          vpc_scrt_path,
+          target
+        )
+      }}  # Dict
+
+- name: load and combine base template
+  block:
+  - name: setup template vars
+    set_fact:
+      service_tmpl_path: "../market/{{ target.market }}/template/{{
+        target.env }}/{{ service_conf.template.name | d('template') }}.yml:{{
+        service_conf.template.name | d('template') }}.template"
+
+  - name: render template
+    set_fact:
+      service_tmpl_conf: >
+        {{
+          lookup(
+            'tmpl_files',
+            service_tmpl_path,
+            service_scrt_path,
+            vpc_scrt_path,
+            service_conf.template.vars | d({}),
+            target
+          )
+        }}  # Dict
+
+  - name: combine template and config
+    set_fact:
+      service_conf_templated: >
+        {{
+          service_conf_templated | d(service_tmpl_conf)
+            | combine(
+                item
+                  | inflate
+                  | template(
+                      template=service_tmpl_conf,
+                      overlay=service_conf
+                    ),
+                recursive=True
+              )
+        }}  # Dict
+    loop: "{{ service_conf.template.overlay | d([]) }}"
+
+  - name: set templated config
+    set_fact:
+      service_conf: "{{ service_conf_templated | d(service_tmpl_conf) }}"
+
+  when: service_conf.template is defined
+
+- debug:
+    verbosity: 4
+    msg: "{{ (vpc_conf | to_nice_yaml).split('\n') }}"
+
+- debug:
+    verbosity: 3
+    msg: "{{ (service_conf | to_nice_yaml).split('\n') }}"
+
+- name: assert prepared vars
+  assert:
+    that:
+    - vpc_conf is defined
+    - vpc_conf is mapping
+    - vpc_conf.market == target.market
+    - vpc_conf.env == target.vpc_env | d(target.env)
+    - service_conf is defined
+    - service_conf is mapping
+    - not '{?' in service_conf | to_json
+    - not '{!' in service_conf | to_json
+    msg: Template is misconfigured.

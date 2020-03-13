@@ -1,0 +1,135 @@
+---
+# NOTE:
+# - aws_sns_topic is passed with include
+
+- name: assert sns config
+  assert:
+    that:
+    - aws_sns_topic is mapping
+    - aws_sns_topic.name is string
+    - aws_sns_topic.name | length > 0
+    msg: SNS topic is misconfigured.
+  tags:
+  - always
+
+
+- name: "{{ aws_sns_topic.name }} > combine topic vars with defaults"
+  set_fact:
+    set_sns_topic: >
+      {{
+        aws_sns_topic_default
+          | combine(aws_sns_topic, recursive=True)
+      }}  # Dict
+
+- name: "{{ set_sns_topic.name }} > set default policy statement list"
+  set_fact:
+    set_policy_statement_list: "{{ aws_sns_policy_statement_default }}"  # List
+
+
+- name: "{{ set_sns_topic.name }} > set subscriber_arn policy"
+  block:
+  - name: "{{ set_sns_topic.name }} > set subscriber_arn access to subscribe statement"
+    set_fact:
+      set_policy_statement_sub: >
+        {{
+          aws_sns_policy_statement_sub_default
+            | combine(
+                {'Principal': {'AWS': aws_sns_topic.subscriber_arn}}
+              )
+        }}  # Dict
+
+  - name: "{{ set_sns_topic.name }} > append subscriber_arn statement to policy statements"
+    set_fact:
+      set_policy_statement_list: >
+        {{
+          set_policy_statement_list
+            | union([set_policy_statement_sub])
+        }}  # List
+
+  when: >
+    aws_sns_topic.subscriber_arn is defined
+    and aws_sns_topic.subscriber_arn | length > 0
+
+
+- name: "{{ set_sns_topic.name }} > set arn prefixes"
+  set_fact:
+    set_sns_arn_prefix: "arn:aws:sns:{{ set_sns_topic.region }}:{{ aws_sns_account_id }}:"
+    set_lambda_arn_prefix: "arn:aws:lambda:{{ set_sns_topic.region }}:{{ aws_sns_account_id }}:function:"
+
+- name: "{{ set_sns_topic.name }} > set sns arn"
+  set_fact:
+    set_policy_statement_resource: "{{ set_sns_arn_prefix }}{{ set_sns_topic.name }}"
+
+- name: "{{ set_sns_topic.name }} > combine sns arn with each prepared statement"
+  set_fact:
+    set_policy_statement: >
+      {{
+        set_policy_statement | d([])
+          | union(
+              [{'Resource': set_policy_statement_resource} | combine(item)]
+            )
+      }}  # List
+  loop: "{{ set_policy_statement_list }}"
+
+- name: "{{ set_sns_topic.name }} > setup sns policy"
+  set_fact:
+    set_policy: >
+      {{
+        aws_sns_policy_default
+          | combine(
+              {
+                'Statement': aws_sns_topic.get('policy', {}).get('Statement', [])
+                  | union(set_policy_statement)
+              }
+            )
+      }}  # Dict
+
+- name: "{{ set_sns_topic.name }} > setup lambda arns"
+  set_fact:
+    set_topic_subs: >
+      {{
+        set_topic_subs | d([])
+          | union(
+              [
+                item | combine({'endpoint': set_lambda_arn_prefix + item.endpoint})
+                if item.protocol == 'lambda' and not item.endpoint.startswith('arn:')
+                else item
+              ]
+            )
+      }}
+  loop: "{{ set_sns_topic.subscriptions | d([]) }}"
+
+- name: "{{ set_sns_topic.name }} > manage sns topic"
+  sns_topic:
+    name: "{{ set_sns_topic.name }}"
+    region: "{{ set_sns_topic.region }}"
+    display_name: "{{ set_sns_topic.name }}"
+    policy: "{{ set_policy }}"
+    delivery_policy: "{{ set_sns_topic.delivery_policy }}"
+    subscriptions: "{{ set_topic_subs | d(omit) }}"
+    purge_subscriptions: "{{ set_sns_topic.purge_subscriptions }}"
+    # FIXME(anryko): Tags option is not supported by sns_topic ansible module.
+    # tags: "{{ set_sns_topic.tags }}"
+
+- name: "{{ set_sns_topic.name }} > grant lambda invoke permission to sns topic"
+  lambda_policy:
+    state: present
+    function_name: "{{ item.split(':')[-1] }}"
+    statement_id: "{{ item.split(':')[-1] }}-access"
+    source_arn: "{{ set_policy_statement_resource }}"
+    action: lambda:InvokeFunction
+    principal: sns.amazonaws.com
+  loop: "{{ set_sns_topic.subscriptions | d([]) | json_query(query) }}"
+  vars:
+    query: "[?protocol == 'lambda'].endpoint"
+
+
+- name: "{{ set_sns_topic.name }} > unset local loop vars"
+  set_fact:
+    set_policy: null
+    set_policy_statement_sub: null
+    set_policy_statement_list: null
+    set_policy_statement: []
+    set_policy_statement_resource: null
+    set_sns_topic: null
+    set_topic_subs: []

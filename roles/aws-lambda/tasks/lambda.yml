@@ -1,0 +1,237 @@
+---
+# NOTE:
+# - aws_lm is passed with include.
+# - set_lm_vpc_id coming from upper scope.
+
+- name: assert lambda config
+  assert:
+    that:
+    - aws_lm is defined
+    - aws_lm is mapping
+    - aws_lm.name is defined
+    - aws_lm.name is string
+    - aws_lm.name | length > 0
+    msg: Lambda is misconfigured.
+
+
+- name: "{{ aws_lm.name }} > combine lambda vars with defaults"
+  set_fact:
+    set_lm: >
+      {{
+        aws_lm_defaults
+          | combine(aws_lm, recursive=True)
+          | combine(
+              {
+                'code': {
+                  'dir': aws_lm.get('code').dir
+                    | d(aws_lm_defaults.code.base_dir + '/' + aws_lm.name)
+                }
+              },
+              recursive=True
+            )
+      }}  # Dict
+
+
+- name: "{{ set_lm.name }} > setup lambda vpc properties"
+  block:
+  - name: "{{ set_lm.name }} > set subnet names"
+    set_fact:
+      set_subnet_names: >
+        {{
+          (
+            set_lm.vpc.subnet_names is defined
+            and set_lm.vpc.subnet_names is sequence
+            and set_lm.vpc.subnet_names | length > 0
+          )
+          | ternary(
+              set_lm.vpc.subnet_names,
+              (set_lm.vpc.is_subnet_public is sameas True)
+                | ternary(
+                    aws_lm_vpc | json_query('subnets[?is_public].name'),
+                    aws_lm_vpc | json_query('subnets[?!is_public].name')
+                  )
+            )
+        }}
+
+  - name: "{{ set_lm.name }} > fetch subnet ids"
+    ec2_vpc_subnet_info:
+      region: "{{ aws_lm_vpc.region }}"
+      filters:
+        "tag:Name": "{{ item }}"
+        vpc-id: "{{ set_lm_vpc_id }}"
+    loop: "{{ set_subnet_names }}"
+    register: subnet_info_output
+
+  - name: "{{ set_lm.name }} > set subnet ids"
+    set_fact:
+      set_subnet_ids: >
+        {{
+          subnet_info_output.results
+            | map(attribute='subnets.0.id')
+            | list
+        }}  # List[str]
+
+  when: set_lm.vpc.is_bound is sameas True
+
+
+- name: "{{ set_lm.name }} > prepare security groups"
+  block:
+  - name: "{{ set_lm.name }} > fetch security groups facts"
+    ec2_group_info:
+      region: "{{ aws_lm_vpc.region }}"
+      filters:
+        group-name: "{{ item }}"
+        vpc-id: "{{ set_lm_vpc_id }}"
+    loop: "{{ set_lm.vpc.security_groups }}"
+    register: group_info_output
+
+  - name: "{{ set_lm.name }} > set security group ids"
+    set_fact:
+      set_security_group_ids: >
+        {{
+          group_info_output.results
+            | map(attribute='security_groups.0.group_id')
+            | list
+        }}  # List[str]
+
+  when: set_lm.vpc.security_groups | length > 0
+
+
+- name: "{{ set_lm.name }} > deploy lambda"
+  block:
+  - name: "{{ set_lm.name }} > zip lambda code"
+    block:
+    - name: "{{ set_lm.name }} > stat lambda code dir"
+      stat:
+        path: "{{ set_lm.code.dir }}"
+      register: code_dir_stat_output
+
+    - name: "{{ set_lm.name }} > assert code dir exists"
+      assert:
+        that:
+        - code_dir_stat_output.stat.isdir is sameas True
+        msg: "Lambda code dir not found: {{ set_lm.code.dir }}"
+
+    - name: "{{ set_lm.name }} > setup temp build dir"
+      tempfile:
+        state: directory
+        suffix: _lambda
+      register: build_tempfile_dir_output
+
+    - name: "{{ set_lm.name }} > set temp build dir path"
+      set_fact:
+        set_build_path: "{{ build_tempfile_dir_output.path.rstrip('/') }}"
+
+    - name: "{{ set_lm.name }} > copy lambda files to temp build dir"
+      synchronize:
+        src: "{{ set_lm.code.dir.rstrip('/') }}/"
+        dest: "{{ set_build_path }}/"
+        compress: False
+
+    - name: "{{ set_lm.name }} > check for Makefile"
+      stat:
+        path: "{{ set_build_path }}/Makefile"
+      register: stat_makefile_output
+
+    - name: "{{ set_lm.name }} > build lambda.zip using Makefile"
+      make:
+        chdir: "{{ set_build_path }}"
+        target: build
+      when: stat_makefile_output.stat.exists
+
+    - name: "{{ set_lm.name }} > setup temp for zip archive"
+      tempfile:
+        state: directory
+        suffix: _lambda
+      register: zip_tempfile_output
+      when: not stat_makefile_output.stat.exists
+
+    - name: "{{ set_lm.name }} > zip lambda code"
+      archive:
+        format: zip
+        path: "{{ set_build_path }}/*"
+        dest: "{{ zip_tempfile_output.path }}/lambda.zip"
+      when: not stat_makefile_output.stat.exists
+
+    - name: set lambda zip path
+      set_fact:
+        set_lambda_zip_path: "{{
+          '%s/lambda.zip' | format(
+            set_build_path
+            if stat_makefile_output.stat.exists
+            else zip_tempfile_output.path
+          )
+        }}"
+
+    - name: "{{ set_lm.name }} > stat lambda.zip file"
+      stat:
+        path: "{{ set_lambda_zip_path }}"
+      register: stat_zip_output
+
+    - name: "{{ set_lm.name }} > ensure lambda.zip file exists"
+      assert:
+       that:
+       - stat_zip_output.stat.exists
+       msg: No lambda.zip artefact detected.
+
+    - name: "{{ set_lm.name }} > set lambda code zip_file"
+      set_fact:
+        set_lm: "{{ set_lm | combine({'zip_file': set_lambda_zip_path}) }}"
+
+    when: aws_lm.zip_file is not defined
+
+
+  - name: "{{ set_lm.name }} > manage lambda"
+    lambda:
+      state: "{{ set_lm.state }}"
+      name: "{{ set_lm.name }}"
+      zip_file: "{{ set_lm.zip_file }}"
+      runtime: "{{ set_lm.runtime }}"
+      role: "{{ set_lm.role | d(omit) }}"
+      handler: "{{ set_lm.handler | d(set_lm.name + '.lambda_handler') }}"
+      memory_size: "{{ set_lm.memory_size }}"
+      timeout: "{{ set_lm.timeout }}"
+      dead_letter_arn: "{{ set_lm.dead_letter_arn | d(omit) }}"
+      vpc_subnet_ids: "{{
+        omit
+        if not set_subnet_ids
+        else set_subnet_ids
+      }}"
+      vpc_security_group_ids: "{{
+        omit
+        if not set_security_group_ids
+        else set_security_group_ids
+      }}"
+      tags: "{{ set_lm.tags }}"
+
+
+  always:
+  - name: "{{ set_lm.name }} > cleanup lambda zip temp"
+    file:
+      path: "{{ zip_tempfile_output.path }}"
+      state: absent
+    when: >
+      aws_lm.zip_file is not defined
+      and not stat_makefile_output.stat.exists
+      and set_lm.code.do_tmp_cleanup is sameas True
+      and zip_tempfile_output.path.strip('/') | length > 0
+
+  - name: "{{ set_lm.name }} > cleanup lambda build temp"
+    file:
+      path: "{{ set_build_path }}"
+      state: absent
+    when: >
+      set_lm.code.do_tmp_cleanup is sameas True
+      and set_build_path.strip('/') | length > 0
+
+
+- name: "{{ set_lm.name }} > unset local loop vars"
+  set_fact:
+    set_lm: null
+    build_tempfile_dir_output: null
+    zip_tempfile_output: null
+    stat_makefile_output: null
+    code_dir_stat_output: null
+    set_subnet_ids: null
+    set_security_group_ids: null
+    set_build_path: null

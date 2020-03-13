@@ -1,0 +1,24 @@
+---
+aws_lm_vpc: null  # Dict
+aws_lm_srv: null  # List[Dict]
+
+aws_lm_defaults:
+  # NOTE(anryko): Any variable from docs can be overwritten here.
+  # https://docs.ansible.com/ansible/latest/modules/lambda_module.html
+  state: present
+  name: null  # str
+  memory_size: 128  # int(MB)
+  timeout: 30  # int(Sec)
+  vpc:
+    is_bound: True
+    is_subnet_public: False
+    subnet_names: []  # List[str]
+    security_groups:  # List[str]
+    - default
+  code:
+    # NOTE(anryko): dir - full path to code dir; if not provided,
+    # combination of <code.base_dir>/<name> is used.
+    dir: null  # str
+    base_dir: ../lambdas  # str(playbook relative path)
+    do_tmp_cleanup: True  # bool
+  tags: "{{ aws_lm_vpc.tags | d({}) }}"  # Dict[str,str]

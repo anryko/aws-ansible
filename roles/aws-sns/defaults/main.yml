@@ -1,0 +1,60 @@
+---
+aws_sns_vpc: {}  # Dict
+aws_sns_srv: []  # List[Dict]
+
+aws_sns_account_id: self  # str
+
+# NOTE(anryko): Magic Id and Sid names starting with '__' make policy
+# parsable by AWS Console UI view (not only JSON Edit view).
+aws_sns_policy_default:  # Dict
+  Version: '2008-10-17'
+  Id: '__default_policy_ID'
+  Statement: []
+
+aws_sns_policy_statement_default:  # List[Dict]
+# NOTE(anryko): 'Resource:' added dynamically per topic for every 'Sid'.
+- Sid: '__default_statement_ID'
+  Effect: Allow
+  Principal:
+    AWS: '*'
+  Action:
+  - 'SNS:Publish'
+  - 'SNS:RemovePermission'
+  - 'SNS:SetTopicAttributes'
+  - 'SNS:DeleteTopic'
+  - 'SNS:ListSubscriptionsByTopic'
+  - 'SNS:GetTopicAttributes'
+  - 'SNS:Receive'
+  - 'SNS:AddPermission'
+  - 'SNS:Subscribe'
+  Condition:
+    StringEquals:
+      AWS:SourceOwner: "{{ aws_sns_account_id }}"
+
+aws_sns_policy_statement_sub_default:  # Dict
+  # NOTE(anryko): 'Principal:AWS:' added dynamically per topic.
+  Sid: '__console_sub_0'
+  Effect: Allow
+  Action:
+  - 'SNS:Subscribe'
+  - 'SNS:Receive'
+
+aws_sns_delivery_policy_default:  # Dict
+  http:
+    defaultHealthyRetryPolicy:
+        minDelayTarget: 20
+        maxDelayTarget: 20
+        numRetries: 3
+        numMaxDelayRetries: 0
+        numNoDelayRetries: 0
+        numMinDelayRetries: 0
+        backoffFunction: linear
+    disableSubscriptionOverrides: False
+
+aws_sns_topic_default:  # Dict
+  name: ''  # str
+  region: "{{ aws_sns_vpc.region }}"  # str
+  policy: "{{ aws_sns_policy_default }}"  # Dict
+  delivery_policy: "{{ aws_sns_delivery_policy_default }}"  # Dict
+  purge_subscriptions: False  # bool
+  tags: "{{ aws_sns_vpc.tags | d({}) }}"  # Dict[str,str]

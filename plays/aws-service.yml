@@ -1,0 +1,138 @@
+---
+- name: validate vars
+  hosts: localhost
+  gather_facts: False
+  tags:
+  - always
+
+  tasks:
+  - assert:
+      that:
+      - market is defined
+      - env is defined
+      - service is defined
+      - version is defined
+      - destroy is not defined
+      msg: you must provide -e '
+        market=[us|lt|...]
+        service=[lambda|logstash|...]
+        env=[dev|stg|prd|..]
+        group=[group1|...]
+        version=[latest|<ver>]
+        destroy=UNDEFINED'
+
+
+- name: aws init service environment
+  hosts: localhost
+  connection: local
+  gather_facts: True
+  tags:
+  - aws
+
+  pre_tasks:
+  # NOTE(anryko): Prepare dynamic variables based on 'target' Dict:
+  # - vpc_conf: Dict
+  # - service_conf: Dict
+  - import_tasks: var-setup.yml
+    vars:
+      target:
+        market: "{{ market }}"
+        service: "{{ service }}"
+        env: "{{ env }}"
+        group: "{{ group | d('group1') }}"
+        version: "{{ version | d(None) }}"
+        timestamp: "{{ timestamp | d(lookup('pipe', 'date +%s')) }}"
+        count: "{{ count | d(1) }}"
+    tags:
+    - always
+
+
+  post_tasks:
+  - meta: refresh_inventory
+    tags:
+    - always
+
+
+  tasks:
+  - include_role:
+      name: aws-s3
+      apply:
+        tags: always
+    vars:
+      aws_s3_vpc: "{{ vpc_conf }}"
+      aws_s3_srv: "{{ service_conf.s3 }}"
+    when: service_conf.s3 is defined
+    tags:
+    - aws-s3
+
+  - include_role:
+      name: aws-iam
+      apply:
+        tags: always
+    vars:
+      aws_iam_vpc: "{{ vpc_conf }}"
+      aws_iam_srv: >
+        {{
+          {
+            'policies': service_conf.s3 | json_query('[].iam.policies') | flatten,
+            'groups': service_conf.s3 | json_query('[].iam.groups') | flatten,
+            'roles': service_conf.s3 | json_query('[].iam.roles') | flatten,
+            'users': service_conf.s3 | json_query('[].iam.users') | flatten
+          }
+        }}  # Dict[str, List]
+    when: service_conf.s3 is defined
+    tags:
+    - aws-s3
+    - aws-iam
+
+  - include_role:
+      name: aws-kms
+      apply:
+        tags: always
+    vars:
+      aws_kms_vpc: "{{ vpc_conf }}"
+      aws_kms_srv: "{{ service_conf.kms }}"
+    # NOTE(anryko): Safeguard check to prevent overwriting VPC KMS key
+    # configuration to be overwritten by service kms configuration.
+    when: >
+      service_conf.kms is defined
+      and not (
+        vpc_conf.kms | d([]) | json_query('[].name')
+          | intersect(service_conf.kms | json_query('[].name'))
+      )
+    tags:
+    - aws-kms
+
+  - include_role:
+      name: aws-iam
+      apply:
+        tags: always
+    vars:
+      aws_iam_vpc: "{{ vpc_conf }}"
+      aws_iam_srv: "{{ service_conf.iam }}"
+    when: service_conf.iam is defined
+    tags:
+    - aws-iam
+
+  - include_role:
+      name: aws-lambda
+      apply:
+        tags: always
+    vars:
+      aws_lm_vpc: "{{ vpc_conf }}"
+      aws_lm_srv: "{{ service_conf.lambdas }}"
+    when: service_conf.lambdas is defined
+    tags:
+    - aws-lambda
+    - deploy
+
+  - include_role:
+      name: aws-sns
+      apply:
+        tags: always
+    vars:
+      aws_sns_vpc: "{{ vpc_conf }}"
+      aws_sns_srv: "{{ service_conf.sns }}"
+    when: service_conf.sns is defined
+    tags:
+    - aws-sns
