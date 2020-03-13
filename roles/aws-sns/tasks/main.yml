@@ -1,0 +1,32 @@
+---
+- name: assert sns config
+  assert:
+    that:
+    - aws_sns_vpc.region is string
+    - aws_sns_vpc.region | length > 0
+    - aws_sns_srv is sequence
+    - aws_sns_srv | length > 0
+    msg: SNS topics role is misconfigured.
+  tags:
+  - always
+
+
+- name: fetch and set fact aws_sns_account_id
+  block:
+  - name: fetch aws caller facts
+    aws_caller_info:
+    register: aws_caller_info_outout
+
+  - name: set sns owner id
+    set_fact:
+      aws_sns_account_id: "{{ aws_caller_info_outout.account }}"
+
+  when: aws_sns_account_id == 'self'
+
+
+- include_tasks: sns_topic.yml
+  with_items: "{{ aws_sns_srv }}"  # List[Dict]
+  loop_control:
+    loop_var: aws_sns_topic
+  tags:
+  - sns-topics

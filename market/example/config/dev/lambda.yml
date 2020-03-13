@@ -1,0 +1,45 @@
+---
+lambda:
+  asgtools1:
+    iam:
+      policies:
+      - name: example-dev-lambda-asgtools1-pl
+        yaml:
+          Statement:
+          - Effect: Allow
+            Action:
+            - ec2:CreateNetworkInterface
+            - ec2:DescribeNetworkInterfaces
+            - ec2:AttachNetworkInterface
+            - ec2:DescribeInstances
+            - ec2:DeleteNetworkInterface
+            - ec2:DescribeTags
+            - ec2:CreateTags
+            - ec2:DeleteTags
+            - autoscaling:DescribeTags
+            - autoscaling:DescribeAutoScalingGroups
+            - route53:ListHostedZonesByName
+            - route53:ChangeResourceRecordSets
+            - logs:PutLogEvents
+            - logs:CreateLogStream
+            - logs:CreateLogGroup
+            Resource: '*'
+      roles:
+      - name: example-dev-lambda-asgtools1-rl
+        assume_policy_type: lambda
+        policies:
+        - example-dev-lambda-asgtools1-pl
+
+    sns:
+    - name: example-dev-asg-sns
+      subscriptions:
+      - endpoint: example-dev-asg-tools
+        protocol: lambda
+
+    lambdas:
+    - name: example-dev-asg-tools
+      runtime: python3.7
+      role: example-dev-lambda-asgtools1-rl
+      handler: lambda.handler
+      code:
+        dir: ../lambdas/asg-tools
