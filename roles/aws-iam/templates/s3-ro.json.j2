@@ -10,8 +10,21 @@
       "s3:GetObjectVersionAcl",
     ],
     "Resource": [
-      "arn:aws:s3:::{{ tmpl.s3_bucket_name }}{% if tmpl.s3_bucket_prefix is defined %}/{{ tmpl.s3_bucket_prefix.strip('/') }}{% endif %}",
-      "arn:aws:s3:::{{ tmpl.s3_bucket_name }}{% if tmpl.s3_bucket_prefix is defined %}/{{ tmpl.s3_bucket_prefix.strip('/') }}{% endif %}/*"
+{% if tmpl.s3_bucket_prefix is defined %}
+  {% if tmpl.s3_bucket_prefix is string %}
+      "arn:aws:s3:::{{ tmpl.s3_bucket_name }}/{{ tmpl.s3_bucket_prefix.strip('/') }}",
+      "arn:aws:s3:::{{ tmpl.s3_bucket_name }}/{{ tmpl.s3_bucket_prefix.strip('/') }}/*"
+  {% elif tmpl.s3_bucket_prefix is sequence %}
+    {% for prefix in tmpl.s3_bucket_prefix %}
+      "arn:aws:s3:::{{ tmpl.s3_bucket_name }}/{{ prefix.strip('/') }}",
+      "arn:aws:s3:::{{ tmpl.s3_bucket_name }}/{{ prefix.strip('/') }}/*"
+      {%- if not loop.last %},{% else %}{% endif -%}
+    {% endfor %}
+  {% endif %}
+{% else %}
+      "arn:aws:s3:::{{ tmpl.s3_bucket_name }}",
+      "arn:aws:s3:::{{ tmpl.s3_bucket_name }}/*"
+{% endif %}
     ]
   }
 {% endblock %}

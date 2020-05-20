@@ -16,20 +16,45 @@
       ],
       "Resource": "arn:aws:s3:::{{ tmpl.s3_bucket_name }}"
     },
+{% if tmpl.s3_bucket_prefix is defined %}
+  {% if tmpl.s3_bucket_prefix is string and tmpl.s3_bucket_prefix.strip('/') | length > 0 %}
     {
       "Effect": "Allow",
       "Action": [
         "s3:ListBucket"
       ],
       "Resource": "arn:aws:s3:::{{ tmpl.s3_bucket_name }}",
-{% if tmpl.s3_bucket_prefix is defined and tmpl.s3_bucket_prefix.strip('/') | length > 0 %}
       "Condition": {
         "StringLike": {
           "s3:prefix": "{{ tmpl.s3_bucket_prefix.strip('/') }}/*"
         }
       }
-{% endif %}
     },
+  {% elif tmpl.s3_bucket_prefix is sequence %}
+    {% for prefix in tmpl.s3_bucket_prefix %}
+    {
+      "Effect": "Allow",
+      "Action": [
+        "s3:ListBucket"
+      ],
+      "Resource": "arn:aws:s3:::{{ tmpl.s3_bucket_name }}",
+      "Condition": {
+        "StringLike": {
+          "s3:prefix": "{{ prefix.strip('/') }}/*"
+        }
+      }
+    },
+    {% endfor %}
+  {% endif %}
+{% else %}
+    {
+      "Effect": "Allow",
+      "Action": [
+        "s3:ListBucket"
+      ],
+      "Resource": "arn:aws:s3:::{{ tmpl.s3_bucket_name }}",
+    },
+{% endif %}
 {% block main_s3_iam_statements %}
 {% endblock %}
   ]
