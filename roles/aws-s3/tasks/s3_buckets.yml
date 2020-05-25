@@ -69,10 +69,31 @@
     name: "{{ set_s3_bucket.name }}"
     rule_id: "{{ item.name | d(omit) }}"
     expiration_days: "{{ item.expiration_days | d(omit) }}"
+    # NOTE(anryko): Min allowed transition_days is 30 and expiration_days must be >= transition_days;
+    # for a default value one additional week is added to the half of current version expiration days.
+    noncurrent_version_expiration_days: "{{
+      item.noncurrent_version_expiration_days | d(
+        item.expiration_days is defined | ternary(
+          item.expiration_days // 2 + 7 if item.expiration_days // 2 + 7 >= 37 else 37,
+          omit
+        )
+      )
+    }}"
     prefix: "{{ item.prefix | d(omit) }}"
     status: "{{ item.status | d('enabled') }}"
     storage_class: "{{ item.storage_class | d(omit) }}"
+    noncurrent_version_storage_class: "{{
+       item.noncurrent_version_storage_class | d(item.storage_class) | d(omit)
+    }}"
     transition_days: "{{ item.transition_days | d(omit) }}"
+    noncurrent_version_transition_days: "{{
+      item.noncurrent_version_transition_days | d(
+        item.transition_days is defined | ternary(
+          item.transition_days // 2 if item.transition_days // 2 >= 30 else 30,
+          omit
+        )
+      )
+    }}"
   when: >
     item.expiration_days is defined
     or item.transition_days is defined
