@@ -12,18 +12,20 @@ aws_s3_bucket_default:
   versioning: False  # bool
   is_encrypted: True  # bool
   encryption: aws:kms  # str(None, 'AES256', 'aws:kms')
-  encryption_key: "{{
-    aws_s3_vpc.config.kms_key_alias | d(None)
-  }}"  # str
+  encryption_key: "{{ aws_s3_vpc.kms_key_alias | d(None) }}"  # str
   policy: {}  # Dict
   lifecycles: []  # List[Dict]
   # Example lifecycles:
   # - name: 'move /tmp/ to glacier in 30 days'
-  #   expiration_days: 30  # int
+  #   # NOTE(anryko): Expired S3 onject is not cleaned up automatically but becomes "noncurrent".
+  #   expiration_days: 37  # int
+  #   noncurrent_version_expiration_days: 30 # int
   #   prefix: /tmp/  # str
   #   status: enabled  # str
   #   storage_class: glacier  # str
-  #   transition_days: 7  # int
+  #   noncurrent_version_storage_class: glacier  # str
+  #   transition_days: 30  # int
+  #   noncurrent_version_transition_days: 30  # int
   logging: {}  # Dict
   # Example logging:
   #   target_bucket: logs-s3-bucket

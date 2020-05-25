@@ -41,6 +41,7 @@
       - item['keys'][0].key_arn.startswith('arn:aws:kms:' + aws_s3_vpc.region)
       msg: "KMS key '{{ item.item | d('null') }}' is misconfigured."
     loop: "{{ aws_s3_kms_info_output.results }}"
+    no_log: True
 
   - name: set s3 kms key alias to arn map
     set_fact:
@@ -52,6 +53,7 @@
         }}
     when: item.item not in (set_s3_kms_key_alias_to_arn_map | d({}))
     loop: "{{ aws_s3_kms_info_output.results }}"
+    no_log: True
 
 
 - include_tasks: s3_buckets.yml
