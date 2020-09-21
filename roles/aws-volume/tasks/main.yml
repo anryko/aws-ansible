@@ -1,0 +1,14 @@
+---
+- include_tasks: setup-volume.yml
+  loop: "{{ aws_vol_srv }}"
+  loop_control:
+    loop_var: loop_volume
+  tags:
+  - ebs-volume
+
+- include_tasks: setup-snapshot.yml
+  loop: "{{ aws_snap_srv }}"
+  loop_control:
+    loop_var: loop_snapshot
+  tags:
+  - ebs-snapshot

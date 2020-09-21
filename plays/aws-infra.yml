@@ -113,3 +113,13 @@
     when: vpc_conf.security_groups is defined
     tags:
     - vpc-sg
+
+  - name: aws-volume
+    aws_vol_vpc: "{{ vpc_conf }}"
+    aws_vol_srv: "{{ vpc_conf.ebs_volumes }}"
+    aws_snap_srv: "{{ vpc_conf.ebs_snapshots }}"
+    when: >
+      vpc_conf.ebs_volumes is defined
+      or vpc_conf.ebs_snapshots is defined
+    tags:
+    - vpc-ebs

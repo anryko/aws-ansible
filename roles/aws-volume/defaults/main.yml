@@ -1,0 +1,28 @@
+---
+aws_vol_vpc: {}  # Dict
+aws_vol_srv: []  # List[Dict]
+aws_snap_srv: []  # List[Dict]
+
+
+aws_vol_defaults:
+  name: ''  # str
+  device_name: /dev/xvdb  # str
+  is_attached: True  # bool
+  region: "{{ ec2_region | d(aws_vol_vpc.region) }}"  # str
+  zone: "{{ ec2_placement | d(aws_vol_vpc.region + 'a') }}"  # str
+  instance_id: "{{ ec2_id | d('') }}"  # str
+  volume_type: gp2  # str
+  volume_size: 10  # int (GB)
+  delete_on_termination: False  # bool
+  encrypted: True  # bool
+  # kms_key_id: null  # str (Optional)
+  # kms_key_alias: null  # str (Optional)
+  tags:  # Dict[str, str]
+    Automated: 'true'
+
+aws_snap_defaults:
+  name: ''  # str
+  description: automated snapshot
+  last_snapshot_min_age: 65535  # int (Minutes)
+  tags:  # Dict[str, str]
+    Automated: 'true'

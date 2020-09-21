@@ -1,0 +1,53 @@
+---
+# NOTE:
+# - loop_snapshot is passed with include
+# - aws_snap_defaults comes from upper scope
+
+- name: set vol combined with defaults
+  set_fact:
+    set_snap: >
+      {{
+        aws_snap_defaults
+          | combine(loop_snapshot, recursive=True)
+          | combine(
+              {
+                'tags': {
+                  'Name': loop_snapshot.name
+                }
+              },
+              recursive=True
+            )
+      }}  # Dict
+
+- name: assert snapshot config
+  assert:
+    that:
+    - set_snap.name is string
+    - set_snap.name | length > 0
+    - set_snap.source is string
+    - set_snap.source | length > 0
+    msg: EBS Snapshot is misconfigured.
+
+- name: "{{ set_snap.name }} > discover snapshot volume by name tag"
+  ec2_vol_info:
+    filters:
+      'tag:Name': "{{ set_snap.source }}"
+  register: ec2_vol_info_output
+
+- name: "{{ set_snap.name }} > set found volume id"
+  set_fact:
+    set_vol_id: "{{ ec2_vol_info_output | json_query('volumes[0].id') }}"
+
+- name: "{{ set_snap.name }} > create volume snapshot if absent or expired"
+  ec2_snapshot:
+    volume_id: "{{ set_vol_id }}"
+    description: "{{ set_snap.description }}"
+    last_snapshot_min_age: "{{ set_snap.last_snapshot_min_age | d(omit) }}"
+    snapshot_tags: "{{ set_snap.tags }}"
+  when: set_vol_id | length > 0
+
+- name: "{{ set_snap.name }} > unset loop vars"
+  set_fact:
+    ec2_vol_info_output: null
+    set_snap: null
+    set_vol_id: null

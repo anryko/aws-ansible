@@ -1,0 +1,144 @@
+---
+# NOTE:
+# - loop_volume is passed with include
+# - aws_vol_defaults comes from upper scope
+
+- name: set vol combined with defaults
+  set_fact:
+    set_vol: >
+      {{
+        aws_vol_defaults
+          | combine(loop_volume, recursive=True)
+          | combine(
+              {
+                'tags': {
+                  'Name': loop_volume.name
+                }
+              },
+              recursive=True)
+      }}  # Dict
+
+- name: assert vol configuration
+  assert:
+    that:
+    - set_vol.name is string
+    - set_vol.name | length > 0
+    - set_vol.region is string
+    - set_vol.region | length > 0
+    - set_vol.zone is string
+    - set_vol.zone | length > 0
+    - not set_vol.is_attached or set_vol.instance_id is defined
+    - not set_vol.is_attached or set_vol.instance_id | length > 0
+    msg: EC2 Volume is misconfigured.
+
+
+- name: "{{ set_vol.name }} > resolve kms key id"
+  block:
+  - name: "{{ set_vol.name }} > fetch kms key id by alias"
+    aws_kms_info:
+      region: "{{ set_vol.region }}"
+      filters:
+        alias: "{{ set_vol.kms_key_alias }}"
+    register: kms_info_outout
+
+  - name: "{{ set_vol.name }} > assert kms key id"
+    assert:
+      that:
+      - kms_info_outout is mapping
+      - kms_info_outout['keys'] is sequence
+      - kms_info_outout['keys'] | length == 1
+      - kms_info_outout['keys'][0] is mapping
+      - kms_info_outout['keys'][0].key_id is string
+      - kms_info_outout['keys'][0].key_id | length > 0
+      msg: KMS key alias was not found.
+
+  - name: "{{ set_vol.name }} > add resolved kms key to the config"
+    set_fact:
+      set_vol: >
+        {{
+          set_vol | combine(
+            {'kms_key_id': kms_info_outout | json_query('keys[0].key_id')}
+          )
+        }}  # Dict
+
+  when: >
+    set_vol.kms_key_alias is defined
+    and set_vol.kms_key_alias is string
+    and set_vol.kms_key_alias | length > 0
+    and (
+      set_vol.kms_key_id is not defined
+      or (
+        set_vol.kms_key_id is string
+        and set_vol.kms_key_id | length == 0
+      )
+    )
+
+
+- name: "{{ set_vol.name }} > assert kms key id"
+  assert:
+    that:
+    - set_vol.kms_key_id is string
+    - set_vol.kms_key_id | length > 0
+    msg: KMS key id is misconfigured.
+  when: >
+    loop_volume.kms_key_alias is defined
+    or loop_volume.kms_key_id is defined
+
+- name: "{{ set_vol.name }} > discover volume by name tag"
+  ec2_vol_info:
+    region: "{{ set_vol.region }}"
+    filters:
+      'tag:Name': "{{ set_vol.name }}"
+  register: ec2_vol_info_output
+
+- name: "{{ set_vol.name }} > create volume if absent"
+  ec2_vol:
+    state: present
+    region: "{{ set_vol.region }}"
+    zone: "{{ set_vol.zone }}"
+    instance: "{{
+      set_vol.instance_id
+      if set_vol.instance_id | length > 0 and set_vol.is_attached
+      else omit
+    }}"
+    device_name: "{{ set_vol.device_name }}"
+    volume_type: "{{ set_vol.volume_type }}"
+    volume_size: "{{ set_vol.volume_size }}"
+    delete_on_termination: "{{ set_vol.delete_on_termination }}"
+    encrypted: "{{ set_vol.encrypted | d(omit) }}"
+    kms_key_id: "{{ set_vol.kms_key_id | d(omit) }}"
+    tags: "{{ set_vol.tags }}"
+  register: ec2_vol_output
+  when: ec2_vol_info_output.volumes | length == 0
+
+
+- name: "{{ set_vol.name }} > attach volume to the instance"
+  block:
+  - name: "{{ set_vol.name }} > set new volume variable"
+    set_fact:
+      set_new_vol: >
+        {{
+          ec2_vol_info_output.volumes
+            | sort(attribute='create_time')
+            | first
+        }}
+
+  - name: "{{ set_vol.name }} > attach existing volume"
+    ec2_vol:
+      region: "{{ set_vol.region }}"
+      id: "{{ set_new_vol.id }}"
+      instance: "{{ set_vol.instance_id }}"
+      device_name: "{{ set_vol.device_name }}"
+
+  when: >
+    set_vol.is_attached
+    and ec2_vol_info_output.volumes | length > 0
+
+
+- name: "{{ set_vol.name }} > unset loop vars"
+  set_fact:
+    set_vol: null
+    set_new_vol: null
+    ec2_vol_info_output: null
+    ec2_vol_output: null
+    kms_info_outout: null
